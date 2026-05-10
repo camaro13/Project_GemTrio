@@ -1,0 +1,271 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Project_GemCoopGameInstance.h"
+#include "Project_GemCoopSaveGame.h"
+#include "Project_GemCoopCharacter.h"
+#include "Project_GemCoopStatComponent.h"
+#include "Kismet/GameplayStatics.h"
+
+void UProject_GemCoopGameInstance::Init()
+{
+	Super::Init();
+
+	LoadGameData();
+}
+
+void UProject_GemCoopGameInstance::LoadGameData()
+{
+	const FString SlotName = TEXT("Project_GemCoopSave_Slot0");
+
+	if (UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+	{
+		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
+	}
+
+	if (!SaveData)
+	{
+		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::CreateSaveGameObject(UProject_GemCoopSaveGame::StaticClass()));
+	}
+
+	TotalGoldCurrency = SaveData->TotalGold;
+	PermanentUpgrades = SaveData->UpgradeLevels;
+	GemCodexData = SaveData->GemCodex;
+	LocalPlayerTrait = SaveData->PlayerTrait;
+}
+
+void UProject_GemCoopGameInstance::SaveGameToSlot()
+{
+	if (!SaveData)
+	{
+		return;
+	}
+
+	SaveData->TotalGold = TotalGoldCurrency;
+	SaveData->UpgradeLevels = PermanentUpgrades;
+	SaveData->GemCodex = GemCodexData;
+	SaveData->Achievements = AchievementData;
+	SaveData->PlayerTrait = LocalPlayerTrait;
+
+	UGameplayStatics::SaveGameToSlot(SaveData, TEXT("Project_GemCoopSave_Slot0"), 0);
+}
+
+void UProject_GemCoopGameInstance::SaveGameResult(FGameResult Result)
+{
+	LastGameResult = Result;
+
+	int32 GoldReward = 0;
+	if (Result.CoopScore >= 90.f)
+	{
+		GoldReward = 1000;
+	}
+	else if (Result.CoopScore >= 75.f)
+	{
+		GoldReward = 600;
+	}
+	else if (Result.CoopScore >= 55.f)
+	{
+		GoldReward = 300;
+	}
+	else
+	{
+		GoldReward = 100;
+	}
+
+	GoldReward += Result.ReachedWave * 20;
+
+	AddGold(GoldReward);
+
+	if (Result.UpgradePointReward > 0)
+	{
+		AddGold(Result.UpgradePointReward * 200);
+	}
+
+	CheckAchievements(Result);
+	SaveGameToSlot();
+}
+
+void UProject_GemCoopGameInstance::CheckAchievements(const FGameResult& Result)
+{
+	if (Result.bVictory)
+	{
+		UnlockAchievement(FName("ACH_Survive15Min"));
+	}
+
+	int32 TotalFusions = GetSaveData()->TotalFusionSuccess + Result.FusionSuccessCount;
+
+	if (TotalFusions >= 50)
+	{
+		UnlockAchievement(FName("ACH_FusionMaster"));
+	}
+
+	if (Result.CoopScore >= 90.f)
+	{
+		UnlockAchievement(FName("ACH_CoopGradeS"));
+	}
+}
+
+bool UProject_GemCoopGameInstance::ApplyUpgrade(FName UpgradeID)
+{
+	int32 CurrentLevel = GetUpgradeLevel(UpgradeID);
+	int32 MaxLevel = GetUpgradeMaxLevel(UpgradeID);
+
+	if (CurrentLevel >= MaxLevel)
+	{
+		return false;
+	}
+
+	int32 Cost = GetUpgradeCost(UpgradeID);
+	
+	if (!SpendGold(Cost))
+	{
+		return false;
+	}
+
+	PermanentUpgrades.FindOrAdd(UpgradeID)++;
+
+	TArray<AActor*> Chars;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AProject_GemCoopCharacter::StaticClass(), Chars);
+
+	for (AActor* A : Chars)
+	{
+		auto* C = Cast<AProject_GemCoopCharacter>(A);
+
+		if (!C || !C->IsLocallyControlled())
+		{
+			continue;
+		}
+
+		C->StatCompRef->ApplyPermanentUpgrade(UpgradeID, 1);
+	}
+
+	OnUpgradeApplied.Broadcast(UpgradeID, PermanentUpgrades[UpgradeID]);
+	SaveGameToSlot();
+
+	return true;
+}
+
+int32 UProject_GemCoopGameInstance::GetUpgradeLevel(FName UpgradeID)
+{
+	int32* Level = PermanentUpgrades.Find(UpgradeID);
+	
+	return Level ? *Level : 0;
+}
+
+int32 UProject_GemCoopGameInstance::GetUpgradeCost(FName UpgradeID)
+{
+	static TMap<FName, int32> BaseCosts =
+	{
+		{"HP_Upgrade", 100},
+		{"ATK_Upgrade", 100},
+		{"DEF_Upgrade", 100},
+		{"SPD_Upgrade", 80},
+		{"CooldownReduction", 120},
+		{"MaxEnergy_Upgrade", 150},
+		{"Crit_Upgrade", 90},
+		{"ReviveCount_Up", 200},
+	};
+
+	int32 Base = BaseCosts.Contains(UpgradeID) ? BaseCosts[UpgradeID] : 100;
+
+	return Base * (GetUpgradeLevel(UpgradeID) + 1);
+}
+
+void UProject_GemCoopGameInstance::RegisterGemToCodex(FName GemID, FGemCodexEntry Entry)
+{
+	bool bIsNew = !GemCodexData.Contains(GemID);
+
+	if (GemCodexData.Contains(GemID))
+	{
+		GemCodexData[GemID].CollectCount++;
+	}
+	else
+	{
+		Entry.CollectCount = 1;
+		GemCodexData.Add(GemID, Entry);
+	}
+
+	if (bIsNew)
+	{
+		OnGemCodexUpdated.Broadcast(GemID);
+
+		if (GemCodexData.Num() >= 20)
+		{
+			UnlockAchievement(FName("ACH_Codex20"));
+		}
+	}
+
+	SaveGameToSlot();
+}
+
+bool UProject_GemCoopGameInstance::IsGemCollected(FName GemID) const
+{
+	return GemCodexData.Contains(GemID);
+}
+
+void UProject_GemCoopGameInstance::AddGold(int32 Amount)
+{
+	TotalGoldCurrency += Amount;
+	if (SaveData)
+	{
+		SaveData->TotalGold = TotalGoldCurrency;
+	}
+
+	OnGoldChanged.Broadcast(TotalGoldCurrency);
+	SaveGameToSlot();
+}
+
+bool UProject_GemCoopGameInstance::SpendGold(int32 Amount)
+{
+	if (TotalGoldCurrency < Amount)
+	{
+		return false;
+	}
+
+	TotalGoldCurrency -= Amount;
+
+	if (SaveData)
+	{
+		SaveData->TotalGold = TotalGoldCurrency;
+	}
+
+	OnGoldChanged.Broadcast(TotalGoldCurrency);
+	SaveGameToSlot();
+
+	return true;
+}
+
+void UProject_GemCoopGameInstance::UnlockAchievement(FName AchID)
+{
+	if (AchievementData.FindOrAdd(AchID))
+	{
+		return;
+	}
+
+	OnAchievementUnlocked.Broadcast(AchID);
+	SaveGameToSlot();
+}
+
+void UProject_GemCoopGameInstance::ApplyPermanentUpgradesToCharacter(AProject_GemCoopCharacter* Character)
+{
+	if (!Character || !Character->StatCompRef)
+	{
+		return;
+	}
+
+	for (auto& Pair : PermanentUpgrades)
+	{
+		for (int32 i = 0; i < Pair.Value; i++)
+		{
+			Character->StatCompRef->ApplyPermanentUpgrade(Pair.Key, 1);
+		}
+	}
+}
+
+int32 UProject_GemCoopGameInstance::GetUpgradeMaxLevel(FName UpgradeID) const
+{
+	static TMap<FName, int32> MaxLevels = {{ "HP_Upgrade", 10 }, { "ATK_Upgrade", 10 }, { "DEF_Upgrade", 10 },{ "SPD_Upgrade", 10 }, { "CooldownReduction", 10 }, { "Crit_Upgrade", 10 },{ "MaxEnergy_Upgrade", 5 }, { "ReviveCount_Up", 3 },};
+	const int32* Max = MaxLevels.Find(UpgradeID);
+	
+	return Max ? *Max : 10;
+}

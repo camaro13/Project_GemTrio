@@ -1,0 +1,43 @@
+# Unreal Engine generated folders
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+
+# Visual Studio / Rider
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Compiled files
+*.dll
+*.exe
+*.pdb
+*.obj
+*.ilk
+*.lib
+*.exp
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Unreal autosaves / backups
+Saved/Autosaves/
+Saved/Backup/
+Saved/Logs/
+Saved/Crashes/
+
+# Packaging
+Windows/
+WindowsNoEditor/
+Linux/
+Mac/
