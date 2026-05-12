@@ -5,6 +5,7 @@
 #include "Project_GemCoopMonsterCharacter.h"
 #include "Project_GemCoopObjectPSubsystem.h"
 #include "Project_GemCoopGameInstance.h"
+#include "Project_GemCoopGameStateBase.h"
 //#include "Project_GemCoopGemDropActor.h"
 #include "Engine/DataTable.h"
 #include "TimerManager.h"
@@ -105,6 +106,11 @@ void AProject_GemCoopWaveManager::StartWave(int32 WaveNumber)
 
 	CurrentWave = FMath::Max(1, WaveNumber);
 	bWaveInProgress = true;
+
+	if (AProject_GemCoopGameStateBase* GS = GetWorld()->GetGameState<AProject_GemCoopGameStateBase>())
+	{
+		GS->SetCurrentWaveNumber(CurrentWave);
+	}
 
 	PendingSpawnCount = 0;
 	PendingSpawnedCount = 0;

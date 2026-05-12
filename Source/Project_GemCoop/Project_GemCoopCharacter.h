@@ -287,7 +287,6 @@ public:
 	void OnGemQ(); 
 	void OnGemW(); 
 	void OnGemE(); 
-	void OnGemR();
 	void OnFusionInput();
 	void OnExchangeInput();
 	void OnUltimateInput();

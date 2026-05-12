@@ -20,6 +20,7 @@ class UProject_GemCoopGemDataSubsystem;
 class UProject_GemCoopStatComponent;
 class UProject_GemCoopBuffComponent;
 class AProject_GemCoopCharacter;
+class AProject_GemCoopMonsterCharacter;
 
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
@@ -59,7 +60,10 @@ public:
 	int32 PendingFusionSlot = -1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gem")
-	int32 MaxSlot = 4;
+	int32 PendingUseSlot = -1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gem")
+	int32 MaxSlots = 3;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gem|Upgrade")
 	float CoolDownReduction = 0.f;
@@ -67,26 +71,38 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Gem|Upgrade")
 	float FusionCoolDownBonus = 0.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem")
+	float DefaultGemCastTime = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem|Target")
+	float GemTargetRange = 2500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem|Debug")
+	bool bDebugLog = true;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gem|State")
 	EGemType LastUsedGemType = EGemType::None;
 
 	UPROPERTY()
-	UProject_GemCoopCombatComponent* CombatCompRef = nullptr;
+	UProject_GemCoopCombatComponent* CombatComp = nullptr;
 
 	UPROPERTY()
-	UProject_GemCoopEnergySYComponent* EnergySYCompRef = nullptr;
+	UProject_GemCoopEnergySYComponent* EnergySYComp = nullptr;
 
 	UPROPERTY()
-	UProject_GemCoopFusionSYComponent* FusionSYCompRef = nullptr;
+	UProject_GemCoopFusionSYComponent* FusionSYComp = nullptr;
 
 	UPROPERTY()
-	UProject_GemCoopStatComponent* StatCompRef = nullptr;
+	UProject_GemCoopStatComponent* StatComp = nullptr;
 
 	UPROPERTY()
-	UProject_GemCoopBuffComponent* BuffCompRef = nullptr;
+	UProject_GemCoopBuffComponent* BuffComp = nullptr;
 
 	UPROPERTY()
 	UProject_GemCoopGemDataSubsystem* GemDataSubsystem = nullptr;
+
+	UPROPERTY()
+	AProject_GemCoopCharacter* OwnerCharacter = nullptr;
 
 	UPROPERTY()
 	AActor* CurrentTarget = nullptr;
@@ -94,9 +110,13 @@ public:
 	UPROPERTY()
 	int32 PlayerIndex = 0;
 
+
 public:
 	UFUNCTION(BlueprintCallable, Category = "Gem")
 	bool UseGem(int32 SlotIndex);
+
+	UFUNCTION()
+	void OnCastingCompleted();
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")
 	void StartFusionAttempt(int32 SlotIndex);
@@ -108,19 +128,30 @@ public:
 	void CancelFusion();
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")
-	void TickCooldown(float DeltaTime);
+	void TickCooldowns(float DeltaTime);
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")
 	void ExchangeGem(int32 SlotIndex, AProject_GemCoopCharacter* Partner);
 
-	UFUNCTION(BlueprintCallable, Category = "Gem")
+	UFUNCTION(BlueprintPure, Category = "Gem")
 	FGemData GetGemData(int32 SlotIndex) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Gem")
+	UFUNCTION(BlueprintPure, Category = "Gem")
 	bool IsSlotReady(int32 SlotIndex) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")
 	void SetGemSlot(int32 SlotIndex, FGemData NewGem);
+
+	UFUNCTION(BlueprintCallable, Category = "Gem")
+	void RefillDefaultGemsForTest();
+
+private:
+	void ApplyGemEffect(int32 SlotIndex);
+	void ApplyFusionEffect(const FFusionResult& Result);
+	void StartCooldown(int32 SlotIndex);
+
+	AActor* FindTargetInFront() const;
+	void ApplyDamageToTarget(AActor* Target, float Damage, EGemType DamageType);
 
 protected:
 	// Called when the game starts
@@ -129,14 +160,4 @@ protected:
 public:	
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-
-private:
-	int32 PendingUseSlot = -1;
-
-	UFUNCTION()
-	void OnCastingCompleted();
-
-	void ApplyGemEffect(int32 SlotIndex);
-	void ApplyFusionEffect(const FFusionResult& Result);
-	void StartCoolDown(int32 SlotIndex);
 };

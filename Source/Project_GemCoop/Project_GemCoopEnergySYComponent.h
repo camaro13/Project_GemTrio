@@ -32,7 +32,10 @@ public:
 	FOnUltGaugeChanged OnUltGaugeChanged;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
-	float CachedSharedEnergy = 0.f;
+	float CachedSharedEnergy = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
+	float CachedMaxSharedEnergy = 100.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
 	float EnergyRegenMultiplier = 1.0f;
@@ -44,10 +47,13 @@ public:
 	bool bInSafeZone = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
-	float UltGaugeContribution = 0.f;
+	float UltGaugeContribution = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
 	float UltGaugeChargeRate = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ultimate")
+	float MaxUltGauge = 100.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
 	bool bUltimateReady = false;
@@ -59,8 +65,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Energy")
 	bool TryConsumeEnergy(float Amount);
 
+	UFUNCTION(BlueprintPure, Category = "Energy")
+	bool HasEnoughEnergy(float Amount) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Energy")
+	void SyncWithGameState();
+
+	UFUNCTION(BlueprintCallable, Category = "Energy")
+	void OnGameStateEnergyChanged(float CurrentEnergy, float MaxEnergy);
+
 	UFUNCTION(BlueprintCallable, Category = "Energy")
 	void OnEnergyChangedCallback(float NewEnergy);
+
+	UFUNCTION(BlueprintCallable, Category = "Energy")
+	void ApplySafeZoneBonus(bool bEntering);
+
+	UFUNCTION(BlueprintCallable, Category = "Ultimate")
+	void ChargeUltGauge(float Amount);
+
+	UFUNCTION(BlueprintCallable, Category = "Ultimate")
+	void ConsumeUltGauge();
+
+	UFUNCTION(BlueprintPure, Category = "Ultimate")
+	float GetUltGaugePercent() const;
 
 	UFUNCTION(BlueprintPure, Category = "Energy")
 	float GetCurrentEnergy() const;
@@ -68,17 +95,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Energy")
 	float GetEnergyPercent() const;
 
-	UFUNCTION(BlueprintCallable, Category = "Energy")
-	void ApplySafeZoneBonus(bool bEntering);
-
-	UFUNCTION(BlueprintCallable, Category = "Energy")
-	void ChargeUltGauge(float Amount);
-
-	UFUNCTION(BlueprintCallable, Category = "Energy")
-	void ConsumeUltGauge();
-
-	UFUNCTION(Server, Reliable)
-	void ServerRPC_ConsumeEnergy(float Amount);
+	/*UFUNCTION(Server, Reliable)
+	void ServerRPC_ConsumeEnergy(float Amount);*/
 
 protected:
 	// Called when the game starts
@@ -87,7 +105,4 @@ protected:
 public:	
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-
-private:
-	void SyncWithGameState();
 };

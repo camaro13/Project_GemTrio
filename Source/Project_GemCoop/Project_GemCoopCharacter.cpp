@@ -224,6 +224,8 @@ void AProject_GemCoopCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
+	EnergySYCompRef->TryConsumeEnergy(20.f);
+
 	StatCompRef = FindComponentByClass<UProject_GemCoopStatComponent>();
 	TraitCompRef = FindComponentByClass<UProject_GemCoopTraitComponent>();
 	BuffCompRef = FindComponentByClass<UProject_GemCoopBuffComponent>();
@@ -798,14 +800,6 @@ void AProject_GemCoopCharacter::OnGemE()
 	}
 }
 
-void AProject_GemCoopCharacter::OnGemR()
-{
-	if (GemCompRef)
-	{
-		GemCompRef->UseGem(3);
-	}
-}
-
 void AProject_GemCoopCharacter::OnFusionInput()
 {
 	if (GemCompRef)
@@ -820,10 +814,22 @@ void AProject_GemCoopCharacter::OnExchangeInput()
 
 void AProject_GemCoopCharacter::OnUltimateInput()
 {
-	if (EnergySYCompRef && EnergySYCompRef->bUltimateReady)
+	if (!EnergySYCompRef)
 	{
-		EnergySYCompRef->ConsumeUltGauge();
+		return;
 	}
+
+	if (!EnergySYCompRef->bUltimateReady)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Ultimate not ready. Gauge: %.1f%%"),
+			EnergySYCompRef->GetUltGaugePercent() * 100.0f
+		);
+		return;
+	}
+
+	EnergySYCompRef->ConsumeUltGauge();
+
+	UE_LOG(LogTemp, Warning, TEXT("Ultimate Activated!"));
 }
 
 void AProject_GemCoopCharacter::OnInteractInput()
