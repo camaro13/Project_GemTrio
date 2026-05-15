@@ -77,6 +77,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem|Target")
 	float GemTargetRange = 2500.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem|DataTable")
+	bool bUseGemDataTable = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem|DataTable")
+	TArray<FName> DefaultSlotGemIDs;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gem|Debug")
 	bool bDebugLog = true;
 
@@ -143,7 +149,19 @@ public:
 	void SetGemSlot(int32 SlotIndex, FGemData NewGem);
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")
-	void RefillDefaultGemsForTest();
+	void RefillDefaultGemsForTest(); //Fallback으로 변경
+
+	UFUNCTION(BlueprintCallable, Category = "Gem")
+	void InitializeGemSlots();
+
+	UFUNCTION(BlueprintCallable, Category = "Gem")
+	bool SetGemSlotByID(int32 SlotIndex, FName GemID);
+
+	UFUNCTION(BlueprintCallable, Category = "Gem")
+	void RefillDefaultGemsFromDataTable();
+
+	UFUNCTION(BlueprintCallable, Category = "Gem")
+	void RefillDefaultGemsFallback();
 
 private:
 	void ApplyGemEffect(int32 SlotIndex);

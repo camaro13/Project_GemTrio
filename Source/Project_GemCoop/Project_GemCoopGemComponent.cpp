@@ -35,6 +35,13 @@ UProject_GemCoopGemComponent::UProject_GemCoopGemComponent()
 	DefaultGemCastTime = 0.5f;
 	GemTargetRange = 2500.f;
 	bDebugLog = true;
+
+	bUseGemDataTable = true;
+
+	DefaultSlotGemIDs.Empty();
+	DefaultSlotGemIDs.Add(TEXT("Ruby_Common"));
+	DefaultSlotGemIDs.Add(TEXT("Sapphire_Common"));
+	DefaultSlotGemIDs.Add(TEXT("Emerald_Common"));
 }
 
 

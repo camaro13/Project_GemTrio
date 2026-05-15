@@ -75,6 +75,59 @@ void AProject_GemCoopWaveManager::ResetRuntimeWaveState()
 	GetWorldTimerManager().ClearTimer(NextWaveTimerHandle);
 }
 
+bool AProject_GemCoopWaveManager::GetMonsterDataByType(EMonsterType MonsterType, FMonsterData& OutData) const
+{
+	if (!bUseMonsterDataTable || !MonsterDataTable)
+	{
+		return false;
+	}
+
+	FName RowName = GetMonsterRowName(MonsterType);
+	FString ContextString = TEXT("GetMonsterDataByType");
+
+	FMonsterData* Row = MonsterDataTable->FindRow<FMonsterData>(RowName, ContextString);
+
+	if (!Row)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MonsterData row not found: %s"), *RowName.ToString());
+		return false;
+	}
+
+	OutData = *Row;
+	return true;
+}
+
+FName AProject_GemCoopWaveManager::GetMonsterRowName(EMonsterType MonsterType) const
+{
+	switch(MonsterType)
+	{
+	case EMonsterType::Goblin:
+		return FName(TEXT("Goblin"));
+
+	case EMonsterType::Bat:
+		return FName(TEXT("Bat"));
+
+	case EMonsterType::Skeleton:
+		return FName(TEXT("Skeleton"));
+
+	case EMonsterType::Orc:
+		return FName(TEXT("Orc"));
+
+	case EMonsterType::Elite:
+		return FName(TEXT("Elite"));
+
+	case EMonsterType::MiniBoss:
+		return FName(TEXT("MiniBoss"));
+
+	case EMonsterType::Boss:
+		return FName(TEXT("Boss"));
+
+	default:
+		break;
+	}
+	return FName(TEXT("Goblin"));
+}
+
 void AProject_GemCoopWaveManager::StartNextWave()
 {
 	if (bDebugLog)
@@ -182,6 +235,13 @@ void AProject_GemCoopWaveManager::SpawnMonsterBatch(FWaveSpawnEntry Entry)
 		return;
 	}
 
+	FMonsterData TableMonsterData;
+
+	if (!Entry.MonsterClass && GetMonsterDataByType(Entry.MonsterType, TableMonsterData))
+	{
+		Entry.MonsterClass = TableMonsterData.MonsterClass;
+	}
+
 	if (!Entry.MonsterClass)
 	{
 		Entry.MonsterClass = DefaultMonsterClass;
@@ -266,14 +326,21 @@ void AProject_GemCoopWaveManager::SpawnSingleMonsterFromPending()
 	}
 
 	FMonsterData MonsterData;
-	MonsterData.MonsterType = PendingSpawnEntry.MonsterType;
-	MonsterData.BaseHP = GetScaledHP(Monster->MaxHP, CurrentWave);
-	MonsterData.BaseATK = GetScaledATK(Monster->ATK, CurrentWave);
-	MonsterData.MoveSpeed = Monster->MoveSpeed;
-	MonsterData.WeaknessGem = Monster->WeaknessGemType;
-	MonsterData.DropGrade = Monster->GemDropGrade;
-	MonsterData.GoldDrop = Monster->GoldDropAmount;
-	MonsterData.MonsterClass = PendingSpawnEntry.MonsterClass;
+
+	if (!GetMonsterDataByType(PendingSpawnEntry.MonsterType, MonsterData))
+	{
+		MonsterData.MonsterType = PendingSpawnEntry.MonsterType;
+		MonsterData.BaseHP = Monster->MaxHP;
+		MonsterData.BaseATK = Monster->ATK;
+		MonsterData.MoveSpeed = Monster->MoveSpeed;
+		MonsterData.WeaknessGem = Monster->WeaknessGemType;
+		MonsterData.DropGrade = Monster->GemDropGrade;
+		MonsterData.GoldDrop = Monster->GoldDropAmount;
+		MonsterData.MonsterClass = PendingSpawnEntry.MonsterClass;
+	}
+
+	MonsterData.BaseHP = GetScaledHP(MonsterData.BaseHP, CurrentWave);
+	MonsterData.BaseATK = GetScaledATK(MonsterData.BaseATK, CurrentWave);
 
 	Monster->InitializeFromData(MonsterData);
 	Monster->OnMonsterDied.AddDynamic(this, &AProject_GemCoopWaveManager::OnMonsterDeath);

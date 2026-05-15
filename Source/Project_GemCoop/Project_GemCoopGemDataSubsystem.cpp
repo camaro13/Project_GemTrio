@@ -32,17 +32,17 @@ void UProject_GemCoopGemDataSubsystem::Initialize(FSubsystemCollectionBase& Coll
 
     GemDataTable = LoadObject<UDataTable>(
         nullptr,
-        TEXT("/Game/GemBlast/Data/DT_GemData.DT_GemData")
+        TEXT("/Game/Data/DT_GemData.DT_GemData")
     );
 
     FusionRecipeTable = LoadObject<UDataTable>(
         nullptr,
-        TEXT("/Game/GemBlast/Data/DT_FusionRecipe.DT_FusionRecipe")
+        TEXT("/Game/Data/DT_FusionRecipe.DT_FusionRecipe")
     );
 
     GradeDropTable = LoadObject<UDataTable>(
         nullptr,
-        TEXT("/Game/GemBlast/Data/DT_GradeDropRate.DT_GradeDropRate")
+        TEXT("/Game/Data/DT_GradeDropRate.DT_GradeDropRate")
     );
 
     if (!GemDataTable)

@@ -76,6 +76,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Debug")
 	bool bDebugLog = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|DataTable")
+	UDataTable* MonsterDataTable = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|DataTable")
+	bool bUseMonsterDataTable = true;
+
 private:
 	FTimerHandle NextWaveTimerHandle;
 	FTimerHandle SpawnTimerHandle;
@@ -123,4 +129,8 @@ protected:
 	FWaveSpawnEntry MakeHardcodedGoblinEntry(int32 WaveNumber) const;
 
 	void ResetRuntimeWaveState();
+
+	bool GetMonsterDataByType(EMonsterType MonsterType, FMonsterData& OutData) const;
+
+	FName GetMonsterRowName(EMonsterType MonsterType) const;
 };

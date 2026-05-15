@@ -13,6 +13,7 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Project_GemCoopMonsterAIControl.h"
 
 // Sets default values
 AProject_GemCoopMonsterCharacter::AProject_GemCoopMonsterCharacter()
@@ -36,6 +37,9 @@ AProject_GemCoopMonsterCharacter::AProject_GemCoopMonsterCharacter()
 	CurrentPhase = 1;
 	CurrentZone = EArenaZone::Combat;
 	LastHitGemType = EGemType::None;
+
+	AIControllerClass = AProject_GemCoopMonsterAIControl::StaticClass();
+	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
 	if (GetCharacterMovement())
 	{
@@ -192,6 +196,12 @@ void AProject_GemCoopMonsterCharacter::AttackTarget(AActor* Target)
 	}
 
 	UGameplayStatics::ApplyDamage(Target, ATK, GetController(), this, nullptr);
+
+	UE_LOG(LogTemp, Warning, TEXT("Monster AttackTarget: %s -> %s Damage %.1f"),
+		*GetNameSafe(this),
+		*GetNameSafe(Target),
+		ATK
+	);
 }
 
 void AProject_GemCoopMonsterCharacter::SetCurrentZone(EArenaZone NewZone)

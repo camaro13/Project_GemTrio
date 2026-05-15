@@ -22,7 +22,7 @@ void UProject_GemCoopTraitDSubsystem::Initialize(FSubsystemCollectionBase& Colle
 
 	TraitDataTable = LoadObject<UDataTable>(
 		nullptr,
-		TEXT("/Game/GemBlast/Data/DT_TraitData.DT_TraitData")
+		TEXT("/Game/Data/DT_TraitData.DT_TraitData")
 	);
 
 	if (!TraitDataTable)
