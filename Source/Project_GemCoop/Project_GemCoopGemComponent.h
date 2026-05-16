@@ -149,9 +149,6 @@ public:
 	void SetGemSlot(int32 SlotIndex, FGemData NewGem);
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")
-	void RefillDefaultGemsForTest(); //Fallback으로 변경
-
-	UFUNCTION(BlueprintCallable, Category = "Gem")
 	void InitializeGemSlots();
 
 	UFUNCTION(BlueprintCallable, Category = "Gem")

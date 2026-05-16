@@ -77,7 +77,7 @@ void UProject_GemCoopGemComponent::BeginPlay()
 		UE_LOG(LogTemp, Warning, TEXT("GemComponent BeginPlay: CombatComp missing."));
 	}
 	
-	RefillDefaultGemsForTest();
+	InitializeGemSlots();
 
 	if (bDebugLog)
 	{
@@ -583,24 +583,13 @@ void UProject_GemCoopGemComponent::ExchangeGem(int32 SlotIndex, AProject_GemCoop
 	PartnerGemComp->OnGemExchanged.Broadcast(PartnerSlot, SlotIndex);
 }
 
-void UProject_GemCoopGemComponent::RefillDefaultGemsForTest()
+void UProject_GemCoopGemComponent::RefillDefaultGemsFallback()
 {
 	MaxSlots = 3;
 
-	if (GemSlots.Num() != MaxSlots)
-	{
-		GemSlots.SetNum(MaxSlots);
-	}
-
-	if (SlotCooldowns.Num() != MaxSlots)
-	{
-		SlotCooldowns.SetNum(MaxSlots);
-	}
-
-	if (bFusionReady.Num() != MaxSlots)
-	{
-		bFusionReady.SetNum(MaxSlots);
-	}
+	GemSlots.SetNum(MaxSlots);
+	SlotCooldowns.SetNum(MaxSlots);
+	bFusionReady.SetNum(MaxSlots);
 
 	for (int32 i = 0; i < MaxSlots; ++i)
 	{
@@ -633,6 +622,106 @@ void UProject_GemCoopGemComponent::RefillDefaultGemsForTest()
 
 	if (bDebugLog)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Default gems refilled. SlotCount=%d"), MaxSlots);
+		UE_LOG(LogTemp, Warning, TEXT("Default fallback gems loaded. SlotCount=%d"), MaxSlots);
+	}
+}
+
+void UProject_GemCoopGemComponent::InitializeGemSlots()
+{
+	MaxSlots = 3;
+
+	GemSlots.SetNum(MaxSlots);
+	SlotCooldowns.SetNum(MaxSlots);
+	bFusionReady.SetNum(MaxSlots);
+
+	for (int32 i = 0; i < MaxSlots; ++i)
+	{
+		SlotCooldowns[i] = 0.0f;
+		bFusionReady[i] = false;
+	}
+
+	if (bUseGemDataTable && GemDataSubsystem)
+	{
+		RefillDefaultGemsFromDataTable();
+		return;
+	}
+
+	RefillDefaultGemsFallback();
+}
+
+bool UProject_GemCoopGemComponent::SetGemSlotByID(int32 SlotIndex, FName GemID)
+{
+	if (!GemSlots.IsValidIndex(SlotIndex))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetGemSlotByID failed. Invalid SlotIndex=%d"), SlotIndex);
+		return false;
+	}
+
+	if (!GemDataSubsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetGemSlotByID failed. GemDataSubsystem missing."));
+		return false;
+	}
+	
+	FGemData GemData = GemDataSubsystem->GetGemData(GemID);
+
+	if (GemData.GemType == EGemType::None || GemData.GemID.IsNone())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetGemSlotByID failed. Invalid GemID=%s"), *GemID.ToString());
+		return false;
+	}
+
+	GemSlots[SlotIndex] = GemData;
+	SlotCooldowns[SlotIndex] = 0.0f;
+	bFusionReady[SlotIndex] = false;
+
+	OnSlotRefilled.Broadcast(SlotIndex, GemData);
+
+	if (bDebugLog)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Gem slot set from DataTable. Slot=%d GemID=%s Type=%d Cost=%.1f Cooldown=%.1f"),
+			SlotIndex,
+			*GemData.GemID.ToString(),
+			static_cast<int32>(GemData.GemType),
+			GemData.EnergyCost,
+			GemData.Cooldown
+		);
+	}
+
+	return true;
+}
+
+void UProject_GemCoopGemComponent::RefillDefaultGemsFromDataTable()
+{
+	bool bAllLoaded = true;
+
+	for (int32 i = 0; i < MaxSlots; ++i)
+	{
+		FName GemID = NAME_None;
+
+		if (DefaultSlotGemIDs.IsValidIndex(i))
+		{
+			GemID = DefaultSlotGemIDs[i];
+		}
+
+		if (GemID.IsNone())
+		{
+			bAllLoaded = false;
+			continue;
+		}
+
+		bool bLoaded = SetGemSlotByID(i, GemID);
+
+		if (!bAllLoaded)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("RefillDefaultGemsFromDataTable failed partially. Using fallback gems."));
+			RefillDefaultGemsFallback();
+			return;
+		}
+		
+		if (bDebugLog)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Default gems loaded from DataTable."));
+		}
 	}
 }
