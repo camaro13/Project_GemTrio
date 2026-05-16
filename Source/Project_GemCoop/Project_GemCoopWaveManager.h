@@ -64,6 +64,18 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wave|Spawn")
 	TArray<AProject_GemCoopMonsterCharacter*> SpawnedMonsters;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Drop")
+	TSubclassOf<AProject_GemCoopGemDropActor> GemDropActorClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Drop")
+	bool bDropGemOnMonsterDeath = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Drop")
+	float GemDropChance = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Drop")
+	float DangerZoneGemDropChance = 0.4f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|Config")
 	float TimeBetweenWaves = 5.0f;
 
@@ -106,6 +118,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wave")
 	void ClearAllMonsters();
 
+	UFUNCTION(BlueprintCallable, Category = "Wave|Drop")
+	void TrySpawnGemDrop(AProject_GemCoopMonsterCharacter* Monster);
+
 	UFUNCTION(BlueprintCallable, Category = "Wave|Scale")
 	float GetScaledHP(float BaseHP, int32 Wave) const;
 
@@ -123,6 +138,8 @@ protected:
 	void OnMonsterDeath(AProject_GemCoopMonsterCharacter* Monster);
 
 	void OnWaveClearedInternal();
+
+	FGemData MakeFallbackDropGem() const;
 
 	AActor* GetRandomSpawnPoint() const;
 

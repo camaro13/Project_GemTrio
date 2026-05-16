@@ -6,7 +6,8 @@
 #include "Project_GemCoopObjectPSubsystem.h"
 #include "Project_GemCoopGameInstance.h"
 #include "Project_GemCoopGameStateBase.h"
-//#include "Project_GemCoopGemDropActor.h"
+#include "Project_GemCoopGemDropActor.h"
+#include "Project_GemCoopGemDataSubsystem.h"
 #include "Engine/DataTable.h"
 #include "TimerManager.h"
 #include "Kismet/GameplayStatics.h"
@@ -367,13 +368,7 @@ void AProject_GemCoopWaveManager::OnMonsterDeath(AProject_GemCoopMonsterCharacte
 
 	SpawnedMonsters.Remove(Monster);
 
-	if (bDebugLog)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("WaveManager Received MonsterDeath: %s, AliveCount=%d"),
-			*GetNameSafe(Monster),
-			SpawnedMonsters.Num()
-		);
-	}
+	TrySpawnGemDrop(Monster);
 
 	OnMonsterDeathEvent.Broadcast(Monster, Monster->GoldDropAmount);
 
@@ -427,6 +422,24 @@ void AProject_GemCoopWaveManager::OnWaveClearedInternal()
 	GetWorldTimerManager().SetTimer(NextWaveTimerHandle, this, &AProject_GemCoopWaveManager::StartNextWave, TimeBetweenWaves, false);
 }
 
+FGemData AProject_GemCoopWaveManager::MakeFallbackDropGem() const
+{
+	FGemData Gem;
+
+	Gem.GemID = TEXT("Ruby_Common");
+	Gem.DisplayName = FText::FromString(TEXT("Ruby"));
+	Gem.GemType = EGemType::Ruby;
+	Gem.Grade = EGemGrade::Common;
+	Gem.EnergyCost = 15.0f;
+	Gem.Cooldown = 3.0f;
+	//Gem.CastTime = 0.5f;
+	Gem.EffectValue = 1.5f;
+	//Gem.Duration = 0.0f;
+	Gem.Description = FText::FromString(TEXT("Fallback Ruby Gem"));
+
+	return Gem;
+}
+
 void AProject_GemCoopWaveManager::ClearAllMonsters()
 {
 	for (AProject_GemCoopMonsterCharacter* Monster : SpawnedMonsters)
@@ -439,6 +452,82 @@ void AProject_GemCoopWaveManager::ClearAllMonsters()
 
 	SpawnedMonsters.Empty();
 	GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+}
+
+void AProject_GemCoopWaveManager::TrySpawnGemDrop(AProject_GemCoopMonsterCharacter* Monster)
+{
+	if (!bDropGemOnMonsterDeath || !Monster)
+	{
+		return;
+	}
+
+	if (!GemDropActorClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GemDropActorClass is not assigned."));
+		return;
+	}
+
+	float CurrentDropChance = GemDropChance;
+
+	if (Monster->GetCurrentZone() == EArenaZone::Danger)
+	{
+		CurrentDropChance = DangerZoneGemDropChance;
+	}
+
+	float Roll = FMath::FRand();
+
+	if (Roll > CurrentDropChance)
+	{
+		if (bDebugLog)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Gem drop failed. Roll=%.2f Chance=%.2f"),
+				Roll,
+				CurrentDropChance
+			);
+		}
+
+		return;
+	}
+
+	FGemData DropGem = MakeFallbackDropGem();
+
+	if (GetWorld() && GetWorld()->GetGameInstance())
+	{
+		if (UProject_GemCoopGemDataSubsystem* GemDataSubsystem = GetWorld()->GetGameInstance()->GetSubsystem<UProject_GemCoopGemDataSubsystem>())
+		{
+			EGemGrade RolledGrade = GemDataSubsystem->RollGemGrade(Monster->MonsterType);
+			FGemData GeneratedGem = GemDataSubsystem->GenerateRandomGem(RolledGrade);
+
+			if (!GeneratedGem.GemID.IsNone() && GeneratedGem.GemType != EGemType::None)
+			{
+				DropGem = GeneratedGem;
+			}
+		}
+	}
+
+	FVector SpawnLocation = Monster->GetActorLocation() + FVector(0.0f, 0.0f, 60.f);
+	FRotator SpawnRotation = FRotator::ZeroRotator;
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	AProject_GemCoopGemDropActor* DropActor = GetWorld()->SpawnActor<AProject_GemCoopGemDropActor>(GemDropActorClass, SpawnLocation, SpawnRotation, SpawnParams);
+
+	if (!DropActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Failed to spawn GemDropActor."));
+		return;
+	}
+
+	DropActor->SetGemData(DropGem, 1);
+
+	if (bDebugLog)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Gem drop spawned. GemID=%s"),
+			*DropGem.GemID.ToString()
+		);
+	}
 }
 
 float AProject_GemCoopWaveManager::GetScaledHP(float BaseHP, int32 Wave) const

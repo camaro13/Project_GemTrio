@@ -12,11 +12,33 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGoldChanged, int32, NewAmount);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnUpgradeApplied, FName, UpgradeID, int32, Level);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGemCodexUpdated, FName, GemID);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAchievementUnlocked, FName, AchID);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnGemInventoryChanged);
 
 class UProject_GemCoopSaveGame;
 class UProject_GemCoopGemDataSubsystem;
 class UProject_GemCoopTraitDSubsystem;
 class AProject_GemCoopCharacter;
+
+USTRUCT(BlueprintType)
+struct FOwnedGemStack
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	FName GemID = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	EGemType GemType = EGemType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	EGemGrade Grade = EGemGrade::Common;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	int32 Count = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	FGemData GemData;
+};
 /**
  * 
  */
@@ -38,6 +60,9 @@ public:
 
 	UPROPERTY(BlueprintAssignable)
 	FOnAchievementUnlocked OnAchievementUnlocked;
+
+	UPROPERTY(BlueprintAssignable, Category = "GemInventory")
+	FOnGemInventoryChanged OnGemInventoryChanged;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Save")
 	UProject_GemCoopSaveGame* SaveData = nullptr;
@@ -65,6 +90,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Achievement")
 	TMap<FName, bool> AchievementData;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GemInventory")
+	TArray<FOwnedGemStack> OwnedGemInventory;
 
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	void SaveGameToSlot();
@@ -102,6 +130,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Character")
 	void ApplyPermanentUpgradesToCharacter(AProject_GemCoopCharacter* Character);
 
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void AddGemToInventory(const FGemData& GemData, int32 Amount = 1);
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	bool RemoveGemFromInventory(FName GemID, int32 Amount = 1);
+
+	UFUNCTION(BlueprintPure, Category = "GemInventory")
+	int32 GetGemCount(FName GemID) const;
+
+	UFUNCTION(BlueprintPure, Category = "GemInventory")
+	TArray<FOwnedGemStack> GetGemInventory() const;
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void ClearGemInventory();
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void DebugPrintGemInventory() const;
+
 	virtual void Init() override;
 
 
@@ -109,4 +155,7 @@ public:
 	void CheckAchievements(const FGameResult& Result);
 	int32 GetUpgradeMaxLevel(FName UpgradeID) const;
 	UProject_GemCoopSaveGame* GetSaveData() { return SaveData; }
+
+private:
+	int32 FindGemStackIndex(FName GemID) const;
 };

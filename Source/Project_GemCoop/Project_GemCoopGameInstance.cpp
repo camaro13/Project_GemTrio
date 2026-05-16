@@ -262,10 +262,155 @@ void UProject_GemCoopGameInstance::ApplyPermanentUpgradesToCharacter(AProject_Ge
 	}
 }
 
+void UProject_GemCoopGameInstance::AddGemToInventory(const FGemData& GemData, int32 Amount)
+{
+	if (Amount <= 0)
+	{
+		return;
+	}
+
+	if (GemData.GemID.IsNone() || GemData.GemType == EGemType::None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AddGemToInventory failed. Invalid GemData."));
+		return;
+	}
+
+	int32 ExistingIndex = FindGemStackIndex(GemData.GemID);
+
+	if (OwnedGemInventory.IsValidIndex(ExistingIndex))
+	{
+		OwnedGemInventory[ExistingIndex].Count += Amount;
+
+		UE_LOG(LogTemp, Warning, TEXT("Gem inventory stacked. GemID=%s Count=%d"),
+			*GemData.GemID.ToString(),
+			OwnedGemInventory[ExistingIndex].Count
+		);
+	}
+	else
+	{
+		FOwnedGemStack NewStack;
+		NewStack.GemID = GemData.GemID;
+		NewStack.GemType = GemData.GemType;
+		NewStack.Grade = GemData.Grade;
+		NewStack.Count = Amount;
+		NewStack.GemData = GemData;
+
+		OwnedGemInventory.Add(NewStack);
+
+		UE_LOG(LogTemp, Warning, TEXT("Gem added to inventory. GemID=%s Count=%d"),
+			*GemData.GemID.ToString(),
+			Amount
+		);
+	}
+
+	OnGemInventoryChanged.Broadcast();
+}
+
+bool UProject_GemCoopGameInstance::RemoveGemFromInventory(FName GemID, int32 Amount)
+{
+	if (GemID.IsNone() || Amount <= 0)
+	{
+		return false;
+	}
+
+	int32 Index = FindGemStackIndex(GemID);
+
+	if (!OwnedGemInventory.IsValidIndex(Index))
+	{
+		return false;
+	}
+
+	if (OwnedGemInventory[Index].Count < Amount)
+	{
+		return false;
+	}
+
+	OwnedGemInventory[Index].Count -= Amount;
+
+	if (OwnedGemInventory[Index].Count <= 0)
+	{
+		OwnedGemInventory.RemoveAt(Index);
+	}
+
+	OnGemInventoryChanged.Broadcast();
+
+	UE_LOG(LogTemp, Warning, TEXT("Gem removed from inventory. GemID=%s Amount=%d"),
+		*GemID.ToString(),
+		Amount
+	);
+
+	return true;
+}
+
+int32 UProject_GemCoopGameInstance::GetGemCount(FName GemID) const
+{
+	if (GemID.IsNone())
+	{
+		return 0;
+	}
+
+	int32 Index = FindGemStackIndex(GemID);
+
+	if (!OwnedGemInventory.IsValidIndex(Index))
+	{
+		return 0;
+	}
+
+	return OwnedGemInventory[Index].Count;
+}
+
+TArray<FOwnedGemStack> UProject_GemCoopGameInstance::GetGemInventory() const
+{
+	return OwnedGemInventory;
+}
+
+void UProject_GemCoopGameInstance::ClearGemInventory()
+{
+	OwnedGemInventory.Empty();
+
+	OnGemInventoryChanged.Broadcast();
+
+	UE_LOG(LogTemp, Warning, TEXT("Gem inventory cleared."));
+}
+
+void UProject_GemCoopGameInstance::DebugPrintGemInventory() const
+{
+	UE_LOG(LogTemp, Warning, TEXT("===== Gem Inventory ====="));
+
+	if (OwnedGemInventory.Num() <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Empty"));
+		return;
+	}
+
+	for (const FOwnedGemStack& Stack : OwnedGemInventory)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GemID=%s Type=%d Grade=%d Count=%d"),
+			*Stack.GemID.ToString(),
+			static_cast<int32>(Stack.GemType),
+			static_cast<int32>(Stack.Grade),
+			Stack.Count
+		);
+	}
+}
+
 int32 UProject_GemCoopGameInstance::GetUpgradeMaxLevel(FName UpgradeID) const
 {
 	static TMap<FName, int32> MaxLevels = {{ "HP_Upgrade", 10 }, { "ATK_Upgrade", 10 }, { "DEF_Upgrade", 10 },{ "SPD_Upgrade", 10 }, { "CooldownReduction", 10 }, { "Crit_Upgrade", 10 },{ "MaxEnergy_Upgrade", 5 }, { "ReviveCount_Up", 3 },};
 	const int32* Max = MaxLevels.Find(UpgradeID);
 	
 	return Max ? *Max : 10;
+}
+
+int32 UProject_GemCoopGameInstance::FindGemStackIndex(FName GemID) const
+{
+	for (int32 i = 0; i < OwnedGemInventory.Num(); ++i)
+	{
+		if (OwnedGemInventory[i].GemID == GemID)
+		{
+			return i;
+		}
+	}
+
+	return INDEX_NONE;
 }
