@@ -7,6 +7,24 @@
 #include "Project_GemCoopTypes.h"
 #include "Project_GemCoopSaveGame.generated.h"
 
+USTRUCT(BlueprintType)
+struct FSaveOwnedGemEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
+	FName GemID = NAME_None;
+
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
+	EGemType GemType = EGemType::None;
+
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
+	EGemGrade Grade = EGemGrade::Common;
+
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite)
+	int32 Count = 0;
+};
+
 /**
  * 
  */
@@ -54,6 +72,9 @@ public:
 
 	UPROPERTY(SaveGame)
 	EGemTrait PlayerTrait = EGemTrait::Offense;
+
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	TArray<FSaveOwnedGemEntry> SavedGemInventory;
 
 	UFUNCTION(BlueprintCallable)
 	void AddGem(FName GemID, EGemGrade Grade);

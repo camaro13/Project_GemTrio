@@ -5,6 +5,7 @@
 #include "Project_GemCoopSaveGame.h"
 #include "Project_GemCoopCharacter.h"
 #include "Project_GemCoopStatComponent.h"
+#include "Project_GemCoopGemDataSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 
 void UProject_GemCoopGameInstance::Init()
@@ -22,20 +23,35 @@ void UProject_GemCoopGameInstance::LoadGameData()
 	{
 		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
 	}
+	else
+	{
+		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::CreateSaveGameObject(UProject_GemCoopSaveGame::StaticClass()));
+	}
 
 	if (!SaveData)
 	{
-		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::CreateSaveGameObject(UProject_GemCoopSaveGame::StaticClass()));
+		UE_LOG(LogTemp, Warning, TEXT("LoadGameData failed. SaveData is null."));
+		return;
 	}
 
 	TotalGoldCurrency = SaveData->TotalGold;
 	PermanentUpgrades = SaveData->UpgradeLevels;
 	GemCodexData = SaveData->GemCodex;
+	AchievementData = SaveData->Achievements;
 	LocalPlayerTrait = SaveData->PlayerTrait;
+
+	LoadGemInventoryFromSaveData();
+
+	UE_LOG(LogTemp, Warning, TEXT("Game loaded. Slot=%s"), *SaveData->SaveSlotName);
 }
 
 void UProject_GemCoopGameInstance::SaveGameToSlot()
 {
+	if (!SaveData)
+	{
+		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::CreateSaveGameObject(UProject_GemCoopSaveGame::StaticClass()));
+	}
+
 	if (!SaveData)
 	{
 		return;
@@ -46,8 +62,13 @@ void UProject_GemCoopGameInstance::SaveGameToSlot()
 	SaveData->GemCodex = GemCodexData;
 	SaveData->Achievements = AchievementData;
 	SaveData->PlayerTrait = LocalPlayerTrait;
+	SaveData->LastSelectedTrait = LocalPlayerTrait;
 
-	UGameplayStatics::SaveGameToSlot(SaveData, TEXT("Project_GemCoopSave_Slot0"), 0);
+	SaveGemInventoryToSaveData();
+
+	UGameplayStatics::SaveGameToSlot(SaveData, SaveData->SaveSlotName, 0);
+
+	UE_LOG(LogTemp, Warning, TEXT("Game saved. Slot=%s"), *SaveData->SaveSlotName);
 }
 
 void UProject_GemCoopGameInstance::SaveGameResult(FGameResult Result)
@@ -371,6 +392,94 @@ void UProject_GemCoopGameInstance::ClearGemInventory()
 	OnGemInventoryChanged.Broadcast();
 
 	UE_LOG(LogTemp, Warning, TEXT("Gem inventory cleared."));
+}
+
+void UProject_GemCoopGameInstance::SaveGemInventoryToSaveData()
+{
+	if (!SaveData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SaveGemInventoryToSaveData failed. SaveData is null."));
+		return;
+	}
+
+	SaveData->SavedGemInventory.Empty();
+
+	for (const FOwnedGemStack& Stack : OwnedGemInventory)
+	{
+		if (Stack.GemID.IsNone() || Stack.GemType == EGemType::None || Stack.Count <= 0)
+		{
+			continue;
+		}
+
+		FSaveOwnedGemEntry SaveEntry;
+
+		SaveEntry.GemID = Stack.GemID;
+		SaveEntry.GemType = Stack.GemType;
+		SaveEntry.Grade = Stack.Grade;
+		SaveEntry.Count = Stack.Count;
+
+		SaveData->SavedGemInventory.Add(SaveEntry);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Gem inventory copied to SaveData. SavedCount=%d"),
+		SaveData->SavedGemInventory.Num()
+	);
+}
+
+void UProject_GemCoopGameInstance::LoadGemInventoryFromSaveData()
+{
+	OwnedGemInventory.Empty();
+
+	if (!SaveData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("LoadGemInventoryFromSaveData failed. SaveData is null."));
+		return;
+	}
+
+	UProject_GemCoopGemDataSubsystem* GemDataSubsystem = nullptr;
+
+	if (GetWorld() && GetWorld()->GetGameInstance())
+	{
+		GemDataSubsystem = GetWorld()->GetGameInstance()->GetSubsystem<UProject_GemCoopGemDataSubsystem>();
+	}
+
+	for (const FSaveOwnedGemEntry& SaveEntry : SaveData->SavedGemInventory)
+	{
+		if (SaveEntry.GemID.IsNone() || SaveEntry.GemType == EGemType::None || SaveEntry.Count <= 0)
+		{
+			continue;
+		}
+
+		FGemData LoadedGemData;
+
+		if (GemDataSubsystem)
+		{
+			LoadedGemData = GemDataSubsystem->GetGemData(SaveEntry.GemID);
+		}
+
+		if (LoadedGemData.GemID.IsNone() || LoadedGemData.GemType == EGemType::None)
+		{
+			LoadedGemData.GemID = SaveEntry.GemID;
+			LoadedGemData.GemType = SaveEntry.GemType;
+			LoadedGemData.Grade = SaveEntry.Grade;
+			LoadedGemData.DisplayName = FText::FromName(SaveEntry.GemID);
+		}
+
+		FOwnedGemStack Stack;
+		Stack.GemID = SaveEntry.GemID;
+		Stack.GemType = SaveEntry.GemType;
+		Stack.Grade = SaveEntry.Grade;
+		Stack.Count = SaveEntry.Count;
+		Stack.GemData = LoadedGemData;
+
+		OwnedGemInventory.Add(Stack);
+	}
+
+	OnGemInventoryChanged.Broadcast();
+
+	UE_LOG(LogTemp, Warning, TEXT("Gem inventory loaded from SaveData. Count=%d"),
+		OwnedGemInventory.Num()
+	);
 }
 
 void UProject_GemCoopGameInstance::DebugPrintGemInventory() const

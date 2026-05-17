@@ -146,6 +146,12 @@ public:
 	void ClearGemInventory();
 
 	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void SaveGemInventoryToSaveData();
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void LoadGemInventoryFromSaveData();
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
 	void DebugPrintGemInventory() const;
 
 	virtual void Init() override;
