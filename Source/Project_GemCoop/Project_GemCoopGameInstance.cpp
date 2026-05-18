@@ -26,6 +26,11 @@ void UProject_GemCoopGameInstance::LoadGameData()
 	else
 	{
 		SaveData = Cast<UProject_GemCoopSaveGame>(UGameplayStatics::CreateSaveGameObject(UProject_GemCoopSaveGame::StaticClass()));
+
+		if (SaveData)
+		{
+			SaveData->SaveSlotName = SlotName;
+		}
 	}
 
 	if (!SaveData)
@@ -66,9 +71,21 @@ void UProject_GemCoopGameInstance::SaveGameToSlot()
 
 	SaveGemInventoryToSaveData();
 
-	UGameplayStatics::SaveGameToSlot(SaveData, SaveData->SaveSlotName, 0);
+	/*UGameplayStatics::SaveGameToSlot(SaveData, SaveData->SaveSlotName, 0);
 
-	UE_LOG(LogTemp, Warning, TEXT("Game saved. Slot=%s"), *SaveData->SaveSlotName);
+	UE_LOG(LogTemp, Warning, TEXT("Game saved. Slot=%s"), *SaveData->SaveSlotName);*/
+
+	const bool bSaved = UGameplayStatics::SaveGameToSlot(
+		SaveData,
+		SaveData->SaveSlotName,
+		0
+	);
+
+	UE_LOG(LogTemp, Warning, TEXT("Game saved. Result=%d Slot=%s SavedGemCount=%d"),
+		bSaved,
+		*SaveData->SaveSlotName,
+		SaveData->SavedGemInventory.Num()
+	);
 }
 
 void UProject_GemCoopGameInstance::SaveGameResult(FGameResult Result)

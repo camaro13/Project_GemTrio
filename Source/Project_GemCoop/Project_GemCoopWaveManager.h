@@ -94,6 +94,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|DataTable")
 	bool bUseMonsterDataTable = true;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|End")
+	int32 MaxWave = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|End")
+	FName LobbyLevelName = TEXT("LobbyLevel");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|End")
+	bool bReturnToLobbyAfterFinalWave = true;
+
 private:
 	FTimerHandle NextWaveTimerHandle;
 	FTimerHandle SpawnTimerHandle;
@@ -129,6 +138,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Wave|Scale")
 	int32 GetScaledCount(int32 BaseCount, int32 Wave) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Wave|End")
+	void CompleteGameAndReturnToLobby();
 
 protected:
 	UFUNCTION()

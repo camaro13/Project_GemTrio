@@ -419,6 +419,12 @@ void AProject_GemCoopWaveManager::OnWaveClearedInternal()
 
 	OnWaveCleared.Broadcast(CurrentWave);
 
+	if (CurrentWave >= MaxWave)
+	{
+		CompleteGameAndReturnToLobby();
+		return;
+	}
+
 	GetWorldTimerManager().SetTimer(NextWaveTimerHandle, this, &AProject_GemCoopWaveManager::StartNextWave, TimeBetweenWaves, false);
 }
 
@@ -565,6 +571,37 @@ int32 AProject_GemCoopWaveManager::GetScaledCount(int32 BaseCount, int32 Wave) c
 	}
 
 	return FMath::Max(1, Result);
+}
+
+void AProject_GemCoopWaveManager::CompleteGameAndReturnToLobby()
+{
+	GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+	GetWorldTimerManager().ClearTimer(NextWaveTimerHandle);
+
+	ClearAllMonsters();
+
+	UE_LOG(LogTemp, Warning, TEXT("Final Wave Cleared. Game Complete. Wave=%d"), CurrentWave);
+
+	if (UProject_GemCoopGameInstance* GI = Cast<UProject_GemCoopGameInstance>(GetGameInstance()))
+	{
+		GI->SaveGameToSlot();
+		GI->DebugPrintGemInventory();
+
+		UE_LOG(LogTemp, Warning, TEXT("Game saved after final wave."));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CompleteGameAndReturnToLobby failed. GameInstance missing."));
+	}
+
+	if (bReturnToLobbyAfterFinalWave)
+	{
+		if (!LobbyLevelName.IsNone())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Return to Lobby: %s"), *LobbyLevelName.ToString());
+			UGameplayStatics::OpenLevel(this, LobbyLevelName);
+		}
+	}
 }
 
 AActor* AProject_GemCoopWaveManager::GetRandomSpawnPoint() const
