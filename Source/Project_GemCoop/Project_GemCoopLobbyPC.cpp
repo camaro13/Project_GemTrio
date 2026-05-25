@@ -2,7 +2,6 @@
 
 
 #include "Project_GemCoopLobbyPC.h"
-#include "Project_GemCoopLobbyWidget.h"
 #include "Blueprint/UserWidget.h"
 
 AProject_GemCoopLobbyPC::AProject_GemCoopLobbyPC()
@@ -19,30 +18,30 @@ void AProject_GemCoopLobbyPC::BeginPlay()
 	FInputModeUIOnly InputMode;
 	SetInputMode(InputMode);
 
-	ShowLobbyWidget();
+	ShowRootWidget();
 }
 
-void AProject_GemCoopLobbyPC::ShowLobbyWidget()
+void AProject_GemCoopLobbyPC::ShowRootWidget()
 {
-	if (LobbyWidget)
+	if (RootWidget)
 	{
-		LobbyWidget->SetVisibility(ESlateVisibility::Visible);
+		RootWidget->SetVisibility(ESlateVisibility::Visible);
 		return;
 	}
 
-	if (!LobbyWidgetClass)
+	if (!RootWidgetClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("LobbyWidgetClass is not assigned."));
+		UE_LOG(LogTemp, Warning, TEXT("MenuPlayerController: RootWidgetClass is not assigned."));
 		return;
 	}
 
-	LobbyWidget = CreateWidget<UProject_GemCoopLobbyWidget>(this, LobbyWidgetClass);
+	RootWidget = CreateWidget<UUserWidget>(this, RootWidgetClass);
 
-	if (!LobbyWidget)
+	if (!RootWidget)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to create LobbyWidget."));
+		UE_LOG(LogTemp, Warning, TEXT("MenuPlayerController: Failed to create RootWidget."));
 		return;
 	}
 
-	LobbyWidget->AddToViewport();
+	RootWidget->AddToViewport();
 }

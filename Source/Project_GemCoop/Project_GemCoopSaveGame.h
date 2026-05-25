@@ -76,6 +76,9 @@ public:
 	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
 	TArray<FSaveOwnedGemEntry> SavedGemInventory;
 
+	UPROPERTY(SaveGame, EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	TArray<FName> SavedEquippedGemIDs;
+
 	UFUNCTION(BlueprintCallable)
 	void AddGem(FName GemID, EGemGrade Grade);
 

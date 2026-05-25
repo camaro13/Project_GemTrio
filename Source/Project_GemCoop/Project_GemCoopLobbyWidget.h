@@ -10,6 +10,8 @@
 class UTextBlock;
 class UButton;
 class UVerticalBox;
+class UWidget;
+class UWidgetSwitcher;
 class UProject_GemCoopGameInstance;
 
 /**
@@ -25,32 +27,71 @@ protected:
 
 protected:
 	UPROPERTY(meta = (BindWidgetOptional))
+	UWidgetSwitcher* WS_Lobby;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UWidget* Panel_Main;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UWidget* Panel_CreateGame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UWidget* Panel_JoinGame;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UWidget* Panel_GemInventory;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UWidget* Panel_Codex;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UWidget* Panel_Settings;
+
+	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* TXT_Gold;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	UTextBlock* TXT_Trait;
-
-	UPROPERTY(meta = (BindWidgetOptional))
-	UTextBlock* TXT_InventoryTitle;
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	UVerticalBox* VB_GemInventory;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	UButton* BTN_StartGame;
+	UVerticalBox* VB_Codex;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	UButton* BTN_Save;
+	UButton* BTN_CreateGame;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	UButton* BTN_Load;
+	UButton* BTN_JoinGame;
 
 	UPROPERTY(meta = (BindWidgetOptional))
-	UButton* BTN_Quit;
+	UButton* BTN_GemInventory;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_Codex;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_Settings;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_BackToMainMenu;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_CreateBack;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_JoinBack;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_InventoryBack;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_CodexBack;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_SettingsBack;
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
-	FName GameLevelName = TEXT("GameLevel");
+	FName MainMenuLevelName = TEXT("MainMenu");
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
@@ -58,25 +99,35 @@ public:
 
 protected:
 	UFUNCTION()
-	void OnClickedStartGame();
+	void OnClickedCreateGame();
 
 	UFUNCTION()
-	void OnClickedSave();
+	void OnClickedJoinGame();
 
 	UFUNCTION()
-	void OnClickedLoad();
+	void OnClickedGemInventory();
 
 	UFUNCTION()
-	void OnClickedQuit();
+	void OnClickedCodex();
+
+	UFUNCTION()
+	void OnClickedSettings();
+
+	UFUNCTION()
+	void OnClickedBackToMainMenu();
+
+	UFUNCTION()
+	void OnClickedBackToLobbyMain();
 
 private:
 	UProject_GemCoopGameInstance* GetGemCoopGameInstance() const;
 
-	void RefreshGold();
-	void RefreshTrait();
-	void RefreshGemInventory();
+	void SwitchToPanel(UWidget* TargetPanel);
 
-public:
+	void RefreshGold();
+	void RefreshGemInventory();
+	void RefreshCodex();
+
 	FString GemTypeToString(EGemType GemType) const;
 	FString GemGradeToString(EGemGrade Grade) const;
 };

@@ -6,7 +6,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Project_GemCoopLobbyPC.generated.h"
 
-class UProject_GemCoopLobbyWidget;
+class UUserWidget;
 
 /**
  * 
@@ -23,13 +23,13 @@ protected:
 	virtual void BeginPlay() override;
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
-	TSubclassOf<UProject_GemCoopLobbyWidget> LobbyWidgetClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
+	TSubclassOf<UUserWidget> RootWidgetClass;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Lobby")
-	UProject_GemCoopLobbyWidget* LobbyWidget = nullptr;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Menu")
+	UUserWidget* RootWidget = nullptr;
 
 public:
-	UFUNCTION(BlueprintCallable, Category = "Lobby")
-	void ShowLobbyWidget();
+	UFUNCTION(BlueprintCallable, Category = "Menu")
+	void ShowRootWidget();
 };

@@ -540,3 +540,27 @@ int32 UProject_GemCoopGameInstance::FindGemStackIndex(FName GemID) const
 
 	return INDEX_NONE;
 }
+
+void UProject_GemCoopGameInstance::InitializeDefaultEquippedGems()
+{
+	if (StarterGemIDs.Num() != 3)
+	{
+		StarterGemIDs.Empty();
+		StarterGemIDs.Add(TEXT("Ruby_Common"));
+		StarterGemIDs.Add(TEXT("Sapphire_Common"));
+		StarterGemIDs.Add(TEXT("Emerald_Common"));
+	}
+
+	if (EquippedGemIDs.Num() != 3)
+	{
+		EquippedGemIDs.SetNum(3);
+	}
+
+	for (int32 i = 0; i < 3; ++i)
+	{
+		if (EquippedGemIDs[i].IsNone())
+		{
+			EquippedGemIDs[i] = StarterGemIDs.IsValidIndex(i) ? StarterGemIDs[i] : NAME_None;
+		}
+	}
+}

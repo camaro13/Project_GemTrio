@@ -94,6 +94,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GemInventory")
 	TArray<FOwnedGemStack> OwnedGemInventory;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "GemInventory")
+	TArray<FName> EquippedGemIDs;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
+	TArray<FName> StarterGemIDs;
+
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	void SaveGameToSlot();
 
@@ -153,6 +159,30 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "GemInventory")
 	void DebugPrintGemInventory() const;
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void InitializeDefaultEquippedGems();
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	bool EquipGemToSlot(int32 SlotIndex, FName GemID);
+
+	UFUNCTION(BlueprintPure, Category = "GemInventory")
+	FName GetEquippedGemID(int32 SLotIndex) const;
+
+	UFUNCTION(BlueprintPure, Category = "GemInventory")
+	TArray<FName> GetEquippedGemIDs() const;
+
+	UFUNCTION(BlueprintPure, Category = "GemInventory")
+	bool CanEquipGem(FName GemID) const;
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void SaveEquippedGemsToSaveData();
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void LoadEquippedGemsFromSaveData();
+
+	UFUNCTION(BlueprintCallable, Category = "GemInventory")
+	void DebugPrintEquippedGems() const;
 
 	virtual void Init() override;
 
