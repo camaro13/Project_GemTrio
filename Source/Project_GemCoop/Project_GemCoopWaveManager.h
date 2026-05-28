@@ -95,7 +95,7 @@ public:
 	bool bUseMonsterDataTable = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|End")
-	int32 MaxWave = 1;
+	int32 MaxWave = 2;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wave|End")
 	FName LobbyLevelName = TEXT("LobbyLevel");

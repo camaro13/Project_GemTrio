@@ -122,6 +122,7 @@ void AProject_GemCoopGemDropActor::OnDropOverlap(UPrimitiveComponent* Overlapped
 	bPickedUp = true;
 
 	GI->AddGemToInventory(DropGemData, DropAmount);
+	GI->DebugPrintGemInventory();
 
 	if (bDebugLog)
 	{

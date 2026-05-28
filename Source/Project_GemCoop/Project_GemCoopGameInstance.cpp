@@ -12,6 +12,7 @@ void UProject_GemCoopGameInstance::Init()
 {
 	Super::Init();
 
+	InitializeDefaultEquippedGems();
 	LoadGameData();
 }
 
@@ -46,6 +47,7 @@ void UProject_GemCoopGameInstance::LoadGameData()
 	LocalPlayerTrait = SaveData->PlayerTrait;
 
 	LoadGemInventoryFromSaveData();
+	LoadEquippedGemsFromSaveData();
 
 	UE_LOG(LogTemp, Warning, TEXT("Game loaded. Slot=%s"), *SaveData->SaveSlotName);
 }
@@ -70,6 +72,8 @@ void UProject_GemCoopGameInstance::SaveGameToSlot()
 	SaveData->LastSelectedTrait = LocalPlayerTrait;
 
 	SaveGemInventoryToSaveData();
+	SaveEquippedGemsToSaveData();
+
 
 	/*UGameplayStatics::SaveGameToSlot(SaveData, SaveData->SaveSlotName, 0);
 
@@ -563,4 +567,121 @@ void UProject_GemCoopGameInstance::InitializeDefaultEquippedGems()
 			EquippedGemIDs[i] = StarterGemIDs.IsValidIndex(i) ? StarterGemIDs[i] : NAME_None;
 		}
 	}
+}
+
+bool UProject_GemCoopGameInstance::EquipGemToSlot(int32 SlotIndex, FName GemID)
+{
+	if (SlotIndex < 0 || SlotIndex >= 3)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipGemToSlot failed. Invalid SlotIndex=%d"), SlotIndex);
+		return false;
+	}
+	
+	if (GemID.IsNone())
+	{
+		return false;
+	}
+
+	if (!CanEquipGem(GemID))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipGemToSlot failed. Gem not owned: %s"), *GemID.ToString());
+		return false;
+	}
+
+	if (EquippedGemIDs.Num() != 3)
+	{
+		EquippedGemIDs.SetNum(3);
+	}
+
+	EquippedGemIDs[SlotIndex] = GemID;
+
+	UE_LOG(LogTemp, Warning, TEXT("Gem equipped. Slot=%d GemID=%s"), SlotIndex, *GemID.ToString());
+
+	return true;
+}
+
+FName UProject_GemCoopGameInstance::GetEquippedGemID(int32 SlotIndex) const
+{
+	if (!EquippedGemIDs.IsValidIndex(SlotIndex))
+	{
+		return NAME_None;
+	}
+
+	return EquippedGemIDs[SlotIndex];
+}
+
+TArray<FName> UProject_GemCoopGameInstance::GetEquippedGemIDs() const
+{
+	return EquippedGemIDs;
+}
+
+bool UProject_GemCoopGameInstance::CanEquipGem(FName GemID) const
+{
+	if (GemID.IsNone())
+	{
+		return false;
+	}
+
+	for (const FName& StarterID : StarterGemIDs)
+	{
+		if (StarterID == GemID)
+		{
+			return true;
+		}
+	}
+
+	return GetGemCount(GemID) > 0;
+}
+
+void UProject_GemCoopGameInstance::SaveEquippedGemsToSaveData()
+{
+	if (!SaveData)
+	{
+		return;
+	}
+
+	InitializeDefaultEquippedGems();
+
+	SaveData->SavedEquippedGemIDs = EquippedGemIDs;
+
+	UE_LOG(LogTemp, Warning, TEXT("Equipped gems copied to SaveData. Count=%d"),
+		SaveData->SavedEquippedGemIDs.Num()
+	);
+}
+
+void UProject_GemCoopGameInstance::LoadEquippedGemsFromSaveData()
+{
+	EquippedGemIDs.Empty();
+
+	if (!SaveData)
+	{
+		InitializeDefaultEquippedGems();
+		return;
+	}
+
+	if (SaveData->SavedEquippedGemIDs.Num() == 3)
+	{
+		EquippedGemIDs = SaveData->SavedEquippedGemIDs;
+	}
+	else
+	{
+		InitializeDefaultEquippedGems();
+		return;
+	}
+
+	InitializeDefaultEquippedGems();
+
+	UE_LOG(LogTemp, Warning, TEXT("Equipped gems loaded. Q=%s W=%s E=%s"),
+		*GetEquippedGemID(0).ToString(),
+		*GetEquippedGemID(1).ToString(),
+		*GetEquippedGemID(2).ToString()
+	);
+}
+
+void UProject_GemCoopGameInstance::DebugPrintEquippedGems() const
+{
+	UE_LOG(LogTemp, Warning, TEXT("===== Equipped Gems ====="));
+	UE_LOG(LogTemp, Warning, TEXT("Q Slot: %s"), *GetEquippedGemID(0).ToString());
+	UE_LOG(LogTemp, Warning, TEXT("W Slot: %s"), *GetEquippedGemID(1).ToString());
+	UE_LOG(LogTemp, Warning, TEXT("E Slot: %s"), *GetEquippedGemID(2).ToString());
 }

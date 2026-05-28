@@ -3,6 +3,7 @@
 
 #include "Project_GemCoopLobbyWidget.h"
 #include "Project_GemCoopGameInstance.h"
+#include "Project_GemCoopGemInvenRowWidget.h"
 #include "Project_GemCoopTypes.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -72,6 +73,7 @@ void UProject_GemCoopLobbyWidget::NativeConstruct()
 
 	if (UProject_GemCoopGameInstance* GI = GetGemCoopGameInstance())
 	{
+		GI->LoadGameData();
 		GI->OnGemInventoryChanged.AddDynamic(this, &UProject_GemCoopLobbyWidget::RefreshLobby);
 	}
 
@@ -94,9 +96,62 @@ void UProject_GemCoopLobbyWidget::SwitchToPanel(UWidget* TargetPanel)
 	WS_Lobby->SetActiveWidget(TargetPanel);
 }
 
+void UProject_GemCoopLobbyWidget::EquipGemFromInventory(int32 SlotIndex, FName GemID)
+{
+	UProject_GemCoopGameInstance* GI = GetGemCoopGameInstance();
+
+	if (!GI)
+	{
+		return;
+	}
+
+	bool bEquipped = GI->EquipGemToSlot(SlotIndex, GemID);
+
+	if (!bEquipped)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Lobby equip failed. Slot=%d GemID=%s"),
+			SlotIndex,
+			*GemID.ToString()
+		);
+		return;
+	}
+
+	GI->SaveGameToSlot();
+	GI->DebugPrintEquippedGems();
+
+	RefreshEquippedGems();
+	RefreshGemInventory();
+}
+
+void UProject_GemCoopLobbyWidget::RefreshEquippedGems()
+{
+	UProject_GemCoopGameInstance* GI = GetGemCoopGameInstance();
+
+	if (!GI)
+	{
+		return;
+	}
+
+	if (TXT_EquippedQ)
+	{
+		TXT_EquippedQ->SetText(FText::FromString(FString::Printf(TEXT("Q: %s"), *GI->GetEquippedGemID(0).ToString())));
+	}
+
+	if (TXT_EquippedW)
+	{
+		TXT_EquippedW->SetText(FText::FromString(FString::Printf(TEXT("W: %s"), *GI->GetEquippedGemID(1).ToString())));
+	}
+
+	if (TXT_EquippedE)
+	{
+		TXT_EquippedE->SetText(FText::FromString(FString::Printf(TEXT("E: %s"), *GI->GetEquippedGemID(2).ToString())));
+	}
+}
+
 void UProject_GemCoopLobbyWidget::RefreshLobby()
 {
 	RefreshGold();
+	RefreshEquippedGems();
 }
 
 void UProject_GemCoopLobbyWidget::RefreshGold()
@@ -127,6 +182,11 @@ void UProject_GemCoopLobbyWidget::OnClickedJoinGame()
 
 void UProject_GemCoopLobbyWidget::OnClickedGemInventory()
 {
+	if (UProject_GemCoopGameInstance* GI = GetGemCoopGameInstance())
+	{
+		GI->LoadGameData();
+		GI->DebugPrintGemInventory();
+	}
 	RefreshGemInventory();
 	SwitchToPanel(Panel_GemInventory);
 }
@@ -167,6 +227,8 @@ void UProject_GemCoopLobbyWidget::RefreshGemInventory()
 
 	VB_GemInventory->ClearChildren();
 
+	RefreshEquippedGems();	
+
 	TArray<FOwnedGemStack> Inventory = GI->GetGemInventory();
 
 	if (Inventory.Num() <= 0)
@@ -175,26 +237,40 @@ void UProject_GemCoopLobbyWidget::RefreshGemInventory()
 
 		if (EmptyText)
 		{
-			EmptyText->SetText(FText::FromString(TEXT("No gems owned,")));
+			EmptyText->SetText(FText::FromString(TEXT("No gems owned.")));
 			VB_GemInventory->AddChild(EmptyText);
 		}
 
 		return;
 	}
 
-	for (FOwnedGemStack& Stack : Inventory)
+	for (const FOwnedGemStack& Stack : Inventory)
 	{
-		UTextBlock* RowText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
-
-		if (!RowText)
+		if (GemInventoryRowWidgetClass)
 		{
-			continue;
+			UProject_GemCoopGemInvenRowWidget* RowWidget = CreateWidget<UProject_GemCoopGemInvenRowWidget>(GetOwningPlayer(), GemInventoryRowWidgetClass);
+
+			if (RowWidget)
+			{
+				RowWidget->SetupRow(this, Stack.GemID, Stack.GemType, Stack.Grade, Stack.Count);
+
+				VB_GemInventory->AddChild(RowWidget);
+			}
 		}
+		/*else
+		{
+			UTextBlock* RowText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 
-		FString RowString = FString::Printf(TEXT("%s | %s | %s | x%d"), *Stack.GemID.ToString(), *GemTypeToString(Stack.GemType), *GemGradeToString(Stack.Grade),Stack.Count);
+			if (!RowText)
+			{
+				continue;
+			}
 
-		RowText->SetText(FText::FromString(RowString));
-		VB_GemInventory->AddChild(RowText);
+			FString RowString = FString::Printf(TEXT("%s | %s | %s | x%d"), *Stack.GemID.ToString(), *GemTypeToString(Stack.GemType), *GemGradeToString(Stack.Grade), Stack.Count);
+
+			RowText->SetText(FText::FromString(RowString));
+			VB_GemInventory->AddChild(RowText);
+		}*/
 	}
 }
 

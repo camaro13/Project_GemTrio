@@ -10,6 +10,7 @@
 #include "Project_GemCoopStatComponent.h"
 #include "Project_GemCoopBuffComponent.h"
 #include "Project_GemCoopGemDataSubsystem.h"
+#include "Project_GemCoopGameInstance.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
@@ -695,13 +696,28 @@ void UProject_GemCoopGemComponent::RefillDefaultGemsFromDataTable()
 {
 	bool bAllLoaded = true;
 
+	TArray<FName> SlotGemIDs = DefaultSlotGemIDs;
+
+	if (GetWorld())
+	{
+		if (UProject_GemCoopGameInstance* GI = Cast<UProject_GemCoopGameInstance>(GetWorld()->GetGameInstance()))
+		{
+			TArray<FName> EquippedIDs = GI->GetEquippedGemIDs();
+
+			if (EquippedIDs.Num() == 3)
+			{
+				SlotGemIDs = EquippedIDs;
+			}
+		}
+	}
+
 	for (int32 i = 0; i < MaxSlots; ++i)
 	{
 		FName GemID = NAME_None;
 
 		if (DefaultSlotGemIDs.IsValidIndex(i))
 		{
-			GemID = DefaultSlotGemIDs[i];
+			GemID = SlotGemIDs[i];
 		}
 
 		if (GemID.IsNone())
@@ -712,16 +728,21 @@ void UProject_GemCoopGemComponent::RefillDefaultGemsFromDataTable()
 
 		bool bLoaded = SetGemSlotByID(i, GemID);
 
-		if (!bAllLoaded)
+		if (!bLoaded)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RefillDefaultGemsFromDataTable failed partially. Using fallback gems."));
-			RefillDefaultGemsFallback();
-			return;
+			bAllLoaded = false;
 		}
-		
-		if (bDebugLog)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Default gems loaded from DataTable."));
-		}
+	}
+
+	if (!bAllLoaded)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("RefillDefaultGemsFromDataTable failed partially. Using fallback gems."));
+		RefillDefaultGemsFallback();
+		return;
+	}
+	
+	if (bDebugLog)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Equipped gems loaded into battle slots from GameInstance."));
 	}
 }

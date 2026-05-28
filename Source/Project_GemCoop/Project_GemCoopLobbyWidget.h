@@ -13,6 +13,7 @@ class UVerticalBox;
 class UWidget;
 class UWidgetSwitcher;
 class UProject_GemCoopGameInstance;
+class UProject_GemCoopGemInvenRowWidget;
 
 /**
  * 
@@ -89,11 +90,26 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	UButton* BTN_SettingsBack;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* TXT_EquippedQ;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* TXT_EquippedW;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* TXT_EquippedE;
+
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
 	FName MainMenuLevelName = TEXT("MainMenu");
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby|Inventory")
+	TSubclassOf<UProject_GemCoopGemInvenRowWidget> GemInventoryRowWidgetClass;
+
 public:
+	UFUNCTION(BlueprintCallable, Category = "Lobby|Inventory")
+	void EquipGemFromInventory(int32 SlotIndex, FName GemID);
+
 	UFUNCTION(BlueprintCallable, Category = "Lobby")
 	void RefreshLobby();
 
@@ -127,6 +143,7 @@ private:
 	void RefreshGold();
 	void RefreshGemInventory();
 	void RefreshCodex();
+	void RefreshEquippedGems();
 
 	FString GemTypeToString(EGemType GemType) const;
 	FString GemGradeToString(EGemGrade Grade) const;
