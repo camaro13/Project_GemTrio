@@ -100,6 +100,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemInventory")
 	TArray<FName> StarterGemIDs;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Settings")
+	FGemCoopUserSettings UserSettings;
+
 	UFUNCTION(BlueprintCallable, Category = "Save")
 	void SaveGameToSlot();
 
@@ -183,6 +186,33 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "GemInventory")
 	void DebugPrintEquippedGems() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void InitializeDefaultUserSettings();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void SetUserSettings(const FGemCoopUserSettings& NewSettings);
+
+	UFUNCTION(BlueprintPure, Category = "Settings")
+	FGemCoopUserSettings GetUserSettings() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void SaveUserSettingsToSaveData();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void LoadUserSettingsFromSaveData();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void ApplyUserSettings();
+
+	UFUNCTION(BlueprintCallable, Category = "Settings|KeyBinding")
+	void SetKeyBinding(FName ActionName, FKey NewKey);
+
+	UFUNCTION(BlueprintPure, Category = "Settings|KeyBinding")
+	FKey GetKeyBinding(FName ActionName) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Settings")
+	void DebugPrintUserSettings() const;
 
 	virtual void Init() override;
 

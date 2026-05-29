@@ -11,6 +11,7 @@ class UTextBlock;
 class UButton;
 class UVerticalBox;
 class UWidget;
+class UEditableTextBox;
 class UWidgetSwitcher;
 class UProject_GemCoopGameInstance;
 class UProject_GemCoopGemInvenRowWidget;
@@ -99,12 +100,33 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* TXT_EquippedE;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	UEditableTextBox* ETB_RoomName;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UEditableTextBox* ETB_JoinCode;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_CreateStart;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* BTN_JoinStart;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* TXT_CreateStatus;
+
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* TXT_JoinStatus;
+
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
 	FName MainMenuLevelName = TEXT("MainMenu");
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby|Inventory")
 	TSubclassOf<UProject_GemCoopGemInvenRowWidget> GemInventoryRowWidgetClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Lobby")
+	FName GameLevelName = TEXT("Lvl_ThirdPerson");
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "Lobby|Inventory")
@@ -134,6 +156,12 @@ protected:
 
 	UFUNCTION()
 	void OnClickedBackToLobbyMain();
+
+	UFUNCTION()
+	void OnClickedCreateStart();
+
+	UFUNCTION()
+	void OnClickedJoinStart();
 
 private:
 	UProject_GemCoopGameInstance* GetGemCoopGameInstance() const;

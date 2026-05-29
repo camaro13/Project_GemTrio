@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "InputCoreTypes.h"
 #include "Project_GemCoopTypes.generated.h"
 
 /**
@@ -107,6 +108,23 @@ enum class EStatEventType : uint8
     Damage	UMETA(DisplayName = "Damage"),
     Heal	UMETA(DisplayName = "Heal"),
     Buff	UMETA(DisplayName = "Buff")
+};
+
+UENUM(BlueprintType)
+enum class EGemCoopWindowMode : uint8
+{
+    Fullscreen UMETA(DisplayName = "Fullscreen"),
+    WindowedFullscreen UMETA(DisplayName = "Windowed Fullscreen"),
+    Windowed UMETA(DisplayName = "Windowed")
+};
+
+UENUM(BlueprintType)
+enum class EGemCoopGraphicsQuality : uint8
+{
+    Low UMETA(DisplayName = "Low"),
+    Medium UMETA(DisplayName = "Medium"),
+    High UMETA(DisplayName = "High"),
+    Epic UMETA(DisplayName = "Epic")
 };
 //-----
 USTRUCT(Atomic, BlueprintType)
@@ -623,6 +641,69 @@ struct FZoneEffectData : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite)
     bool bMonsterBlocked = false;
+};
+
+USTRUCT(BlueprintType)
+struct FGemCoopUserSettings
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Game")
+    FString Language = TEXT("Korean");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Game")
+    float HUDScale = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Game")
+    bool bShowDamageNumbers = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Game")
+    bool bColorBlindMode = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Graphics")
+    int32 ResolutionX = 1920;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Graphics")
+    int32 ResolutionY = 1080;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Graphics")
+    EGemCoopWindowMode WindowMode = EGemCoopWindowMode::Windowed;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Graphics")
+    EGemCoopGraphicsQuality GraphicsQuality = EGemCoopGraphicsQuality::High;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Graphics")
+    bool bVSync = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Graphics")
+    float FrameRateLimit = 60.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Sound")
+    float MasterVolume = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Sound")
+    float BGMVolume = 0.8f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Sound")
+    float SFXVolume = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Sound")
+    float UIVolume = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Gameplay")
+    float MouseSensitivity = 1.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Gameplay")
+    bool bInvertMouse = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Gameplay")
+    bool bCameraShake = true;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|Gameplay")
+    bool bAimAssist = false;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Settings|KeyBinding")
+    TMap<FName, FKey> KeyBindings;
 };
 
 class PROJECT_GEMCOOP_API Project_GemCoopTypes

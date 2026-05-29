@@ -6,12 +6,16 @@
 #include "Project_GemCoopCharacter.h"
 #include "Project_GemCoopStatComponent.h"
 #include "Project_GemCoopGemDataSubsystem.h"
+#include "Engine/Engine.h"
+#include "GameFramework/GameUserSettings.h"
+#include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 
 void UProject_GemCoopGameInstance::Init()
 {
 	Super::Init();
 
+	InitializeDefaultUserSettings();
 	InitializeDefaultEquippedGems();
 	LoadGameData();
 }
@@ -48,6 +52,7 @@ void UProject_GemCoopGameInstance::LoadGameData()
 
 	LoadGemInventoryFromSaveData();
 	LoadEquippedGemsFromSaveData();
+	LoadUserSettingsFromSaveData();
 
 	UE_LOG(LogTemp, Warning, TEXT("Game loaded. Slot=%s"), *SaveData->SaveSlotName);
 }
@@ -73,7 +78,7 @@ void UProject_GemCoopGameInstance::SaveGameToSlot()
 
 	SaveGemInventoryToSaveData();
 	SaveEquippedGemsToSaveData();
-
+	SaveUserSettingsToSaveData();
 
 	/*UGameplayStatics::SaveGameToSlot(SaveData, SaveData->SaveSlotName, 0);
 
@@ -215,7 +220,12 @@ int32 UProject_GemCoopGameInstance::GetUpgradeCost(FName UpgradeID)
 
 void UProject_GemCoopGameInstance::RegisterGemToCodex(FName GemID, FGemCodexEntry Entry)
 {
-	bool bIsNew = !GemCodexData.Contains(GemID);
+	if (GemID.IsNone())
+	{
+		return;
+	}
+
+	const bool bIsNew = !GemCodexData.Contains(GemID);
 
 	if (GemCodexData.Contains(GemID))
 	{
@@ -227,17 +237,18 @@ void UProject_GemCoopGameInstance::RegisterGemToCodex(FName GemID, FGemCodexEntr
 		GemCodexData.Add(GemID, Entry);
 	}
 
-	if (bIsNew)
-	{
-		OnGemCodexUpdated.Broadcast(GemID);
+	OnGemCodexUpdated.Broadcast(GemID);
 
-		if (GemCodexData.Num() >= 20)
-		{
-			UnlockAchievement(FName("ACH_Codex20"));
-		}
+	if (bIsNew && GemCodexData.Num() >= 20)
+	{
+		UnlockAchievement(FName("Ach_Codex20"));
 	}
 
-	SaveGameToSlot();
+	UE_LOG(LogTemp, Warning, TEXT("Codex registered. GemID=%s Count=%d IsNew=%d"),
+		*GemID.ToString(),
+		GemCodexData.Contains(GemID) ? GemCodexData[GemID].CollectCount : 0,
+		bIsNew
+	);
 }
 
 bool UProject_GemCoopGameInstance::IsGemCollected(FName GemID) const
@@ -343,6 +354,21 @@ void UProject_GemCoopGameInstance::AddGemToInventory(const FGemData& GemData, in
 			*GemData.GemID.ToString(),
 			Amount
 		);
+	}
+
+	if (!GemCodexData.Contains(GemData.GemID))
+	{
+		FGemCodexEntry NewEntry;
+
+		RegisterGemToCodex(GemData.GemID, NewEntry);
+		
+		UE_LOG(LogTemp, Warning, TEXT("Gem registered to codex. GemID=%s"),
+			*GemData.GemID.ToString()
+		);
+	}
+	else
+	{
+		RegisterGemToCodex(GemData.GemID, GemCodexData[GemData.GemID]);
 	}
 
 	OnGemInventoryChanged.Broadcast();
@@ -684,4 +710,173 @@ void UProject_GemCoopGameInstance::DebugPrintEquippedGems() const
 	UE_LOG(LogTemp, Warning, TEXT("Q Slot: %s"), *GetEquippedGemID(0).ToString());
 	UE_LOG(LogTemp, Warning, TEXT("W Slot: %s"), *GetEquippedGemID(1).ToString());
 	UE_LOG(LogTemp, Warning, TEXT("E Slot: %s"), *GetEquippedGemID(2).ToString());
+}
+
+void UProject_GemCoopGameInstance::InitializeDefaultUserSettings()
+{
+	UserSettings = FGemCoopUserSettings();
+
+	UserSettings.KeyBindings.Empty();
+	
+	UserSettings.KeyBindings.Add(TEXT("MoveForward"), EKeys::W);
+	UserSettings.KeyBindings.Add(TEXT("MoveBackward"), EKeys::S);
+	UserSettings.KeyBindings.Add(TEXT("MoveLeft"), EKeys::A);
+	UserSettings.KeyBindings.Add(TEXT("MoveRight"), EKeys::D);
+
+	UserSettings.KeyBindings.Add(TEXT("BasicAttack"), EKeys::LeftMouseButton);
+	UserSettings.KeyBindings.Add(TEXT("Dash"), EKeys::LeftShift);
+
+	UserSettings.KeyBindings.Add(TEXT("GemSlot1"), EKeys::One);
+	UserSettings.KeyBindings.Add(TEXT("GemSlot2"), EKeys::Two);
+	UserSettings.KeyBindings.Add(TEXT("GemSlot3"), EKeys::Three);
+	UserSettings.KeyBindings.Add(TEXT("Ultimate"), EKeys::Four);
+}
+
+void UProject_GemCoopGameInstance::SetUserSettings(const FGemCoopUserSettings& NewSettings)
+{
+	UserSettings = NewSettings;
+
+	UserSettings.HUDScale = FMath::Clamp(UserSettings.HUDScale, 0.5f, 2.f);
+	
+	UserSettings.MasterVolume = FMath::Clamp(UserSettings.MasterVolume, 0.0f, 1.f);
+	UserSettings.BGMVolume = FMath::Clamp(UserSettings.BGMVolume, 0.0f, 1.f);
+	UserSettings.SFXVolume = FMath::Clamp(UserSettings.SFXVolume, 0.0f, 1.f);
+	UserSettings.UIVolume = FMath::Clamp(UserSettings.UIVolume, 0.0f, 1.f);
+
+	UserSettings.MouseSensitivity = FMath::Clamp(UserSettings.MouseSensitivity, 0.1f, 3.f);
+	UserSettings.FrameRateLimit = FMath::Clamp(UserSettings.FrameRateLimit, 30.f, 240.f);
+
+	ApplyUserSettings();
+}
+
+FGemCoopUserSettings UProject_GemCoopGameInstance::GetUserSettings() const
+{
+	return UserSettings;
+}
+
+void UProject_GemCoopGameInstance::SaveUserSettingsToSaveData()
+{
+	if (!SaveData)
+	{
+		return;
+	}
+
+	SaveData->SavedUserSettings = UserSettings;
+}
+
+void UProject_GemCoopGameInstance::LoadUserSettingsFromSaveData()
+{
+	if (!SaveData)
+	{
+		InitializeDefaultUserSettings();
+		return;
+	}
+
+	UserSettings = SaveData->SavedUserSettings;
+
+	if (UserSettings.KeyBindings.Num() <= 0)
+	{
+		InitializeDefaultUserSettings();
+	}
+
+	ApplyUserSettings();
+}
+
+void UProject_GemCoopGameInstance::ApplyUserSettings()
+{
+	if (GEngine && GEngine->GetGameUserSettings())
+	{
+		UGameUserSettings* GameUserSettings = GEngine->GetGameUserSettings();
+
+		GameUserSettings->SetScreenResolution(FIntPoint(UserSettings.ResolutionX, UserSettings.ResolutionY));
+
+		EWindowMode::Type WindowMode = EWindowMode::Windowed;
+
+		switch (UserSettings.WindowMode)
+		{
+		case EGemCoopWindowMode::Fullscreen:
+			WindowMode = EWindowMode::Fullscreen;
+			break;
+
+		case EGemCoopWindowMode::WindowedFullscreen:
+			WindowMode = EWindowMode::WindowedFullscreen;
+			break;
+
+		case EGemCoopWindowMode::Windowed:
+		default:
+			WindowMode = EWindowMode::Windowed;
+			break;
+		}
+
+		GameUserSettings->SetFullscreenMode(WindowMode);
+		GameUserSettings->SetVSyncEnabled(UserSettings.bVSync);
+		GameUserSettings->SetFrameRateLimit(UserSettings.FrameRateLimit);
+
+		int32 QualityValue = 2;
+
+		switch (UserSettings.GraphicsQuality)
+		{
+		case EGemCoopGraphicsQuality::Low:
+			QualityValue = 0;
+			break;
+
+		case EGemCoopGraphicsQuality::Medium:
+			QualityValue = 1;
+			break;
+
+		case EGemCoopGraphicsQuality::High:
+			QualityValue = 2;
+			break;
+
+		case EGemCoopGraphicsQuality::Epic:
+			QualityValue = 3;
+			break;
+
+		default:
+			QualityValue = 2;
+			break;
+		}
+
+		GameUserSettings->SetOverallScalabilityLevel(QualityValue);
+		GameUserSettings->ApplySettings(false);
+	}
+}
+
+void UProject_GemCoopGameInstance::SetKeyBinding(FName ActionName, FKey NewKey)
+{
+	if (ActionName.IsNone() || !NewKey.IsValid())
+	{
+		return;
+	}
+
+	UserSettings.KeyBindings.Add(ActionName, NewKey);
+}
+
+FKey UProject_GemCoopGameInstance::GetKeyBinding(FName ActionName) const
+{
+	if (const FKey* FoundKey = UserSettings.KeyBindings.Find(ActionName))
+	{
+		return *FoundKey;
+	}
+
+	return EKeys::Invalid;
+}
+
+void UProject_GemCoopGameInstance::DebugPrintUserSettings() const
+{
+	UE_LOG(LogTemp, Warning, TEXT("===== User Settings ====="));
+	UE_LOG(LogTemp, Warning, TEXT("Resolution: %dx%d"), UserSettings.ResolutionX, UserSettings.ResolutionY);
+	UE_LOG(LogTemp, Warning, TEXT("MasterVolume: %.2f"), UserSettings.MasterVolume);
+	UE_LOG(LogTemp, Warning, TEXT("BGMVolume: %.2f"), UserSettings.BGMVolume);
+	UE_LOG(LogTemp, Warning, TEXT("SFXVolume: %.2f"), UserSettings.SFXVolume);
+	UE_LOG(LogTemp, Warning, TEXT("UIVolume: %.2f"), UserSettings.UIVolume);
+	UE_LOG(LogTemp, Warning, TEXT("MouseSensitivity: %.2f"), UserSettings.MouseSensitivity);
+
+	for (const TPair<FName, FKey>& Pair : UserSettings.KeyBindings)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("KeyBinding: %s = %s"),
+			*Pair.Key.ToString(),
+			*Pair.Value.ToString()
+		);
+	}
 }

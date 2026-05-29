@@ -9,8 +9,10 @@
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/WidgetSwitcher.h"
+#include "Components/EditableTextBox.h"
 #include "Blueprint/WidgetTree.h"
 #include "Kismet/GameplayStatics.h"
+#include "Project_GemCoopSettingsWidget.h"
 
 void UProject_GemCoopLobbyWidget::NativeConstruct()
 {
@@ -69,6 +71,16 @@ void UProject_GemCoopLobbyWidget::NativeConstruct()
 	if (BTN_SettingsBack)
 	{
 		BTN_SettingsBack->OnClicked.AddDynamic(this, &UProject_GemCoopLobbyWidget::OnClickedBackToLobbyMain);
+	}
+
+	if (BTN_CreateStart)
+	{
+		BTN_CreateStart->OnClicked.AddDynamic(this, &UProject_GemCoopLobbyWidget::OnClickedCreateStart);
+	}
+
+	if (BTN_JoinStart)
+	{
+		BTN_JoinStart->OnClicked.AddDynamic(this, &UProject_GemCoopLobbyWidget::OnClickedJoinStart);
 	}
 
 	if (UProject_GemCoopGameInstance* GI = GetGemCoopGameInstance())
@@ -168,6 +180,16 @@ void UProject_GemCoopLobbyWidget::RefreshGold()
 
 void UProject_GemCoopLobbyWidget::OnClickedCreateGame()
 {
+	if (TXT_CreateStatus)
+	{
+		TXT_CreateStatus->SetText(FText::FromString(TEXT("Create private game.")));
+	}
+
+	if (ETB_RoomName)
+	{
+		ETB_RoomName->SetText(FText::FromString(TEXT("MyRoom")));
+	}
+
 	SwitchToPanel(Panel_CreateGame);
 
 	UE_LOG(LogTemp, Warning, TEXT("Create Game panel opened. Not implemented yet."));
@@ -175,6 +197,16 @@ void UProject_GemCoopLobbyWidget::OnClickedCreateGame()
 
 void UProject_GemCoopLobbyWidget::OnClickedJoinGame()
 {
+	if (TXT_JoinStatus)
+	{
+		TXT_JoinStatus->SetText(FText::FromString(TEXT("Enter room code")));
+	}
+
+	if (ETB_JoinCode)
+	{
+		ETB_JoinCode->SetText(FText::GetEmpty());
+	}
+
 	SwitchToPanel(Panel_JoinGame);
 
 	UE_LOG(LogTemp, Warning, TEXT("Join Game panel opened. Not implemented yet."));
@@ -214,6 +246,74 @@ void UProject_GemCoopLobbyWidget::OnClickedBackToLobbyMain()
 {
 	SwitchToPanel(Panel_Main);
 	RefreshLobby();
+}
+
+void UProject_GemCoopLobbyWidget::OnClickedCreateStart()
+{
+	FString RoomName = TEXT("MyRoom");
+
+	if (ETB_RoomName)
+	{
+		RoomName = ETB_RoomName->GetText().ToString();
+	}
+
+	if (RoomName.TrimStartAndEnd().IsEmpty())
+	{
+		if (TXT_CreateStatus)
+		{
+			TXT_CreateStatus->SetText(FText::FromString(TEXT("Room name is empty.")));
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("CreateStart failed. RoomName is empty."));
+		return;
+	}
+
+	if (UProject_GemCoopGameInstance* GI = GetGemCoopGameInstance())
+	{
+		GI->CurrentSessionInfo = RoomName;
+		GI->bIsOnlineSession = false;
+		GI->SaveGameToSlot();
+	}
+
+	if (TXT_CreateStatus)
+	{
+		TXT_CreateStatus->SetText(FText::FromString(TEXT("Starting game...")));
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Create private game. RoomName=%s"), *RoomName);
+
+	if (!GameLevelName.IsNone())
+	{
+		UGameplayStatics::OpenLevel(this, GameLevelName);
+	}
+}
+
+void UProject_GemCoopLobbyWidget::OnClickedJoinStart()
+{
+	FString JoinCode;
+
+	if (ETB_JoinCode)
+	{
+		JoinCode = ETB_JoinCode->GetText().ToString();
+	}
+
+	if (JoinCode.TrimStartAndEnd().IsEmpty())
+	{
+		if (TXT_JoinStatus)
+		{
+			TXT_JoinStatus->SetText(FText::FromString(TEXT("Join code is empty.")));
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("JoinStart failed. JoinCode is empty."));
+		return;
+	}
+
+	if (TXT_JoinStatus)
+	{
+		TXT_JoinStatus->SetText(FText::FromString(TEXT("Join system is not implemented yet.")));
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("Join Game requested. Code=%s. Not implemented yet."), *JoinCode);
 }
 
 void UProject_GemCoopLobbyWidget::RefreshGemInventory()
@@ -285,7 +385,11 @@ void UProject_GemCoopLobbyWidget::RefreshCodex()
 
 	VB_Codex->ClearChildren();
 
-	if (GI->GemCodexData.Num() <= 0)
+	GI->LoadGameData();
+
+	const int32 CollectedCount = GI->GemCodexData.Num();
+
+	if (CollectedCount <= 0)
 	{
 		UTextBlock* EmptyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 
@@ -298,7 +402,7 @@ void UProject_GemCoopLobbyWidget::RefreshCodex()
 		return;
 	}
 
-	for (TPair<FName, FGemCodexEntry>& Pair : GI->GemCodexData)
+	for (const TPair<FName, FGemCodexEntry>& Pair : GI->GemCodexData)
 	{
 		UTextBlock* RowText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 
@@ -307,7 +411,7 @@ void UProject_GemCoopLobbyWidget::RefreshCodex()
 			continue;
 		}
 
-		FString RowString = FString::Printf(TEXT("GemID: %s | Collected"), *Pair.Key.ToString());
+		const FString RowString = FString::Printf(TEXT("Collected Gem: %s"), *Pair.Key.ToString());
 
 		RowText->SetText(FText::FromString(RowString));
 		VB_Codex->AddChild(RowText);
