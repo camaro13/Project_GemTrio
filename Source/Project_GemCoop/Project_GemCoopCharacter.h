@@ -24,6 +24,7 @@ class AProject_GemCoopProjectile;
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UInputMappingContext;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -167,6 +168,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GemCoop|Combat")
 	float MouseTraceDistance = 10000.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|BasicAttack")
+	float BasicAttackSpawnDistance = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Aim")
+	float AimTraceDistance = 100000.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Aim")
+	float AimYawSendThreshold = 1.0f;
+
 public:
 	UFUNCTION(BlueprintPure, Category = "GemCoop|HP")
 	float GetCurrentHP() const;
@@ -198,8 +208,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	void DashEnd();
 
-	UFUNCTION(BlueprintCallable, Category = "GemCoop|Combat")
-	void OnBasicAttackInput();
+	/*UFUNCTION(BlueprintCallable, Category = "GemCoop|Combat")
+	void OnBasicAttackInput();*/
 
 	UFUNCTION(BlueprintCallable, Category = "GemCoop|Combat")
 	void BasicAttack();
@@ -210,8 +220,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GemCoop|Combat")
 	void MeleeAttack(const FVector& AttackDirection);
 
-	UFUNCTION(BlueprintCallable, Category = "GemCoop|Aim")
-	void UpdateAimToMouse();
+	/*UFUNCTION(BlueprintCallable, Category = "GemCoop|Aim")
+	void UpdateAimToMouse();*/
 
 	UFUNCTION(BlueprintCallable, Category = "GemCoop|Aim")
 	bool GetMouseWorldLocation(FVector& OutWorldLocation) const;
@@ -223,6 +233,44 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void BeginPlay() override;
+
+public:
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void RequestBasicAttack(FVector AttackDirection);
+
+	UFUNCTION(BlueprintCallable, Category = "Combat")
+	void RequestSetAimYaw(float NewYaw);
+
+protected:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestBasicAttack(FVector_NetQuantizeNormal AttackDirection);
+
+	UFUNCTION(Server, Unreliable)
+	void ServerSetAimYaw(float NewYaw);
+
+	void BasicAttack_ServerOnly(FVector AttackDirection);
+
+	bool GetMouseAimDirection(FVector& OutDirection) const;
+	void UpdateAimToMouse();
+
+protected:
+	UFUNCTION()
+	void OnBasicAttackInput();
+
+private:
+	float LastSentAimYaw = 0.0f;
+	bool bHasSentAimYaw = false;
+
+public:
+	UFUNCTION(BlueprintCallable, Category = "Gem")
+	bool RequestUseGemSlot(int32 SlotIndex);
+
+protected:
+	UFUNCTION(Server, Reliable)
+	void ServerRequestUseGemSlot(int32 SlotIndex);
+
+	bool UseGemSlot_ServerOnly(int32 SlotIndex);
+
 protected:
 
 	/** Initialize input action bindings */

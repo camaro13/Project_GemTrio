@@ -33,19 +33,19 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnPhaseChanged OnPhaseChanged;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Monster")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category="Monster")
 	float MaxHP = 100.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
 	float CurrentHP = 100.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	float ATK = 10.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	float MoveSpeed = 300.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	EMonsterType MonsterType = EMonsterType::Goblin;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
@@ -57,10 +57,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	EGemType WeaknessGemType = EGemType::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	bool bIsDead = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
 	int32 CurrentPhase = 1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster")

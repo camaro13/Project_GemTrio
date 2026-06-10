@@ -639,3 +639,55 @@ void UProject_GemCoopSettingsWidget::OnClickedResetSettings()
 
 	RefreshAllWidgets();
 }
+
+void UProject_GemCoopSettingsWidget::RefreshText()
+{
+	if (TXT_HUDScaleValue)
+	{
+		TXT_HUDScaleValue->SetText(FText::FromString(
+			FString::Printf(TEXT("HUD Scale: %.2f"), PendingSettings.HUDScale)
+		));
+	}
+
+	if (TXT_FrameRateLimitValue)
+	{
+		TXT_FrameRateLimitValue->SetText(FText::FromString(
+			FString::Printf(TEXT("FPS Limit: %.0f"), PendingSettings.FrameRateLimit)
+		));
+	}
+
+	if (TXT_MasterVolumeValue)
+	{
+		TXT_MasterVolumeValue->SetText(FText::FromString(
+			FString::Printf(TEXT("Master: %.0f%%"), PendingSettings.MasterVolume * 100.0f)
+		));
+	}
+
+	if (TXT_BGMVolumeValue)
+	{
+		TXT_BGMVolumeValue->SetText(FText::FromString(
+			FString::Printf(TEXT("BGM: %.0f%%"), PendingSettings.BGMVolume * 100.0f)
+		));
+	}
+
+	if (TXT_SFXVolumeValue)
+	{
+		TXT_SFXVolumeValue->SetText(FText::FromString(
+			FString::Printf(TEXT("SFX: %.0f%%"), PendingSettings.SFXVolume * 100.0f)
+		));
+	}
+
+	if (TXT_UIVolumeValue)
+	{
+		TXT_UIVolumeValue->SetText(FText::FromString(
+			FString::Printf(TEXT("UI: %.0f%%"), PendingSettings.UIVolume * 100.0f)
+		));
+	}
+
+	if (TXT_MouseSensitivityValue)
+	{
+		TXT_MouseSensitivityValue->SetText(FText::FromString(
+			FString::Printf(TEXT("Mouse Sensitivity: %.2f"), PendingSettings.MouseSensitivity)
+		));
+	}
+}

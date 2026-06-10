@@ -11,6 +11,8 @@
 #include "Project_GemCoopBuffComponent.h"
 #include "Project_GemCoopGemDataSubsystem.h"
 #include "Project_GemCoopGameInstance.h"
+#include "GameFramework/GameStateBase.h"
+#include "Net/UnrealNetwork.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
@@ -21,6 +23,8 @@ UProject_GemCoopGemComponent::UProject_GemCoopGemComponent()
 	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
+
+	SetIsReplicatedByDefault(true);
 
 	MaxSlots = 3;
 
@@ -45,7 +49,6 @@ UProject_GemCoopGemComponent::UProject_GemCoopGemComponent()
 	DefaultSlotGemIDs.Add(TEXT("Emerald_Common"));
 }
 
-
 // Called when the game starts
 void UProject_GemCoopGemComponent::BeginPlay()
 {
@@ -58,6 +61,28 @@ void UProject_GemCoopGemComponent::BeginPlay()
 	FusionSYComp = GetOwner() ? GetOwner()->FindComponentByClass<UProject_GemCoopFusionSYComponent>() : nullptr;
 	StatComp = GetOwner() ? GetOwner()->FindComponentByClass<UProject_GemCoopStatComponent>() : nullptr;
 	BuffComp = GetOwner() ? GetOwner()->FindComponentByClass<UProject_GemCoopBuffComponent>() : nullptr;
+
+	const int32 DesiredSlotCount = FMath::Max(3, GemSlots.Num());
+
+	if (SlotCooldowns.Num() != DesiredSlotCount)
+	{
+		SlotCooldowns.SetNum(DesiredSlotCount);
+	}
+
+	if (SlotCooldownEndTimes.Num() != DesiredSlotCount)
+	{
+		SlotCooldownEndTimes.SetNum(DesiredSlotCount);
+	}
+
+	for (int32 i = 0; i < SlotCooldowns.Num(); ++i)
+	{
+		SlotCooldowns[i] = 0.0f;
+	}
+
+	for (int32 i = 0; i < SlotCooldownEndTimes.Num(); ++i)
+	{
+		SlotCooldownEndTimes[i] = 0.0f;
+	}
 
 	if (GetWorld() && GetWorld()->GetGameInstance())
 	{
@@ -86,139 +111,163 @@ void UProject_GemCoopGemComponent::BeginPlay()
 	}
 }
 
-
 // Called every frame
 void UProject_GemCoopGemComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	
-	TickCooldowns(DeltaTime);
+	const int32 DesiredSlotCount = FMath::Max(3, GemSlots.Num());
+
+	if (SlotCooldowns.Num() != DesiredSlotCount)
+	{
+		SlotCooldowns.SetNum(DesiredSlotCount);
+	}
+
+	for (int32 i = 0; i < SlotCooldowns.Num(); ++i)
+	{
+		SlotCooldowns[i] = GetSlotCooldownRemaining(i);
+	}
+
+	//TickCooldowns(DeltaTime);
 	// ...
 }
 
-bool UProject_GemCoopGemComponent::UseGem(int32 SlotIndex)
-{
-	if (SlotIndex < 0 || SlotIndex >= MaxSlots)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Invalid slot: %d"), SlotIndex);
-		return false;
-	}
+//bool UProject_GemCoopGemComponent::UseGem(int32 SlotIndex)
+//{
+//	AActor* OwnerActor = GetOwner();
+//
+//	if (!OwnerActor)
+//	{
+//		return false;
+//	}
+//
+//	if (!OwnerActor->HasAuthority())
+//	{
+//		return false;
+//	}
+//
+//	return UseGem_Internal(SlotIndex);
+//	/*if (SlotIndex < 0 || SlotIndex >= MaxSlots)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Invalid slot: %d"), SlotIndex);
+//		return false;
+//	}
+//
+//	if (!GemSlots.IsValidIndex(SlotIndex))
+//	{
+//		return false;
+//	}
+//
+//	if (!IsSlotReady(SlotIndex))
+//	{
+//		if (bDebugLog)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Slot not ready: %d"), SlotIndex);
+//		}
+//		return false;
+//	}
+//
+//	if (!CombatComp)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. CombatComp missing."));
+//		return false;
+//	}
+//
+//	if (CombatComp->bIsCasting)
+//	{
+//		if (bDebugLog)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Already casting."));
+//		}
+//		return false;
+//	}
+//
+//	if (!EnergySYComp)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. EnergySYComp missing."));
+//		return false;
+//	}
+//
+//	FGemData& Gem = GemSlots[SlotIndex];
+//
+//	if (Gem.GemType == EGemType::None)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Empty slot: %d"), SlotIndex);
+//		return false;
+//	}
+//
+//	EnergySYComp->SyncWithGameState();
+//
+//	if (!EnergySYComp->HasEnoughEnergy(Gem.EnergyCost))
+//	{
+//		EnergySYComp->OnEnergyInsufficient.Broadcast(Gem.EnergyCost, EnergySYComp->CachedSharedEnergy);
+//
+//		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Not enough energy. Cost=%.1f Current=%.1f"),
+//			Gem.EnergyCost,
+//			EnergySYComp->CachedSharedEnergy
+//		);
+//
+//		return false;
+//	}
+//
+//	PendingUseSlot = SlotIndex;
+//
+//	CombatComp->StartCasting(DefaultGemCastTime);
+//
+//	if (bDebugLog)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("UseGem started casting. Slot=%d Gem=%s Cost=%.1f"),
+//			SlotIndex,
+//			*Gem.GemID.ToString(),
+//			Gem.EnergyCost
+//		);
+//	}
+//
+//	return true;*/
+//}
 
-	if (!GemSlots.IsValidIndex(SlotIndex))
-	{
-		return false;
-	}
-
-	if (!IsSlotReady(SlotIndex))
-	{
-		if (bDebugLog)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Slot not ready: %d"), SlotIndex);
-		}
-		return false;
-	}
-
-	if (!CombatComp)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. CombatComp missing."));
-		return false;
-	}
-
-	if (CombatComp->bIsCasting)
-	{
-		if (bDebugLog)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Already casting."));
-		}
-		return false;
-	}
-
-	if (!EnergySYComp)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. EnergySYComp missing."));
-		return false;
-	}
-
-	FGemData& Gem = GemSlots[SlotIndex];
-
-	if (Gem.GemType == EGemType::None)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Empty slot: %d"), SlotIndex);
-		return false;
-	}
-
-	EnergySYComp->SyncWithGameState();
-
-	if (!EnergySYComp->HasEnoughEnergy(Gem.EnergyCost))
-	{
-		EnergySYComp->OnEnergyInsufficient.Broadcast(Gem.EnergyCost, EnergySYComp->CachedSharedEnergy);
-
-		UE_LOG(LogTemp, Warning, TEXT("UseGem failed. Not enough energy. Cost=%.1f Current=%.1f"),
-			Gem.EnergyCost,
-			EnergySYComp->CachedSharedEnergy
-		);
-
-		return false;
-	}
-
-	PendingUseSlot = SlotIndex;
-
-	CombatComp->StartCasting(DefaultGemCastTime);
-
-	if (bDebugLog)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("UseGem started casting. Slot=%d Gem=%s Cost=%.1f"),
-			SlotIndex,
-			*Gem.GemID.ToString(),
-			Gem.EnergyCost
-		);
-	}
-
-	return true;
-}
-
-void UProject_GemCoopGemComponent::OnCastingCompleted()
-{
-	if (!GemSlots.IsValidIndex(PendingUseSlot))
-	{
-		PendingUseSlot = -1;
-		return;	
-	}
-
-	if (!EnergySYComp)
-	{
-		PendingUseSlot = -1;
-		return;
-	}
-
-	FGemData Gem = GemSlots[PendingUseSlot];
-
-	if (!EnergySYComp->TryConsumeEnergy(Gem.EnergyCost))
-	{
-		if (bDebugLog)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("Casting completed but energy consume failed."));
-		}
-
-		PendingUseSlot = -1;
-		return;
-	}
-
-	ApplyGemEffect(PendingUseSlot);
-	StartCooldown(PendingUseSlot);
-
-	OnGemUsed.Broadcast(PendingUseSlot, GemSlots[PendingUseSlot]);
-
-	if (bDebugLog)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Gem Used. Slot=%d Gem=%s"),
-			PendingUseSlot,
-			*GemSlots[PendingUseSlot].GemID.ToString()
-		);
-	}
-
-	PendingUseSlot = -1;
-}
+//void UProject_GemCoopGemComponent::OnCastingCompleted()
+//{
+//	if (!GemSlots.IsValidIndex(PendingUseSlot))
+//	{
+//		PendingUseSlot = -1;
+//		return;	
+//	}
+//
+//	if (!EnergySYComp)
+//	{
+//		PendingUseSlot = -1;
+//		return;
+//	}
+//
+//	FGemData Gem = GemSlots[PendingUseSlot];
+//
+//	if (!EnergySYComp->TryConsumeEnergy(Gem.EnergyCost))
+//	{
+//		if (bDebugLog)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("Casting completed but energy consume failed."));
+//		}
+//
+//		PendingUseSlot = -1;
+//		return;
+//	}
+//
+//	ApplyGemEffect(PendingUseSlot);
+//	StartCooldown(PendingUseSlot);
+//
+//	OnGemUsed.Broadcast(PendingUseSlot, GemSlots[PendingUseSlot]);
+//
+//	if (bDebugLog)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("Gem Used. Slot=%d Gem=%s"),
+//			PendingUseSlot,
+//			*GemSlots[PendingUseSlot].GemID.ToString()
+//		);
+//	}
+//
+//	PendingUseSlot = -1;
+//}
 
 void UProject_GemCoopGemComponent::TickCooldowns(float DeltaTime)
 {
@@ -264,141 +313,178 @@ void UProject_GemCoopGemComponent::SetGemSlot(int32 SlotIndex, FGemData NewGem)
 	OnSlotRefilled.Broadcast(SlotIndex, NewGem);
 }
 
-void UProject_GemCoopGemComponent::StartCooldown(int32 SlotIndex)
-{
-	if (!GemSlots.IsValidIndex(SlotIndex) || !SlotCooldowns.IsValidIndex(SlotIndex))
-	{
-		return;
-	}
+//void UProject_GemCoopGemComponent::StartCooldown(int32 SlotIndex)
+//{
+//	if (!GemSlots.IsValidIndex(SlotIndex) || !SlotCooldowns.IsValidIndex(SlotIndex))
+//	{
+//		return;
+//	}
+//
+//	float Cooldown = FMath::Max(0.0f, GemSlots[SlotIndex].Cooldown * (1.f - CoolDownReduction));
+//
+//	SlotCooldowns[SlotIndex] = Cooldown;
+//
+//	OnCoolDownChanged.Broadcast(SlotIndex, Cooldown);
+//}
 
-	float Cooldown = FMath::Max(0.0f, GemSlots[SlotIndex].Cooldown * (1.f - CoolDownReduction));
-
-	SlotCooldowns[SlotIndex] = Cooldown;
-
-	OnCoolDownChanged.Broadcast(SlotIndex, Cooldown);
-}
-
-void UProject_GemCoopGemComponent::ApplyGemEffect(int32 SlotIndex)
-{
-	if (!GemSlots.IsValidIndex(SlotIndex))
-	{
-		return;
-	}
-
-	FGemData& Gem = GemSlots[SlotIndex];
-	float EffectVal = FMath::Max(0.0f, Gem.EffectValue);
-
-	switch (Gem.GemType)
-	{
-	case EGemType::Ruby:
-	{
-		AActor* Target = FindTargetInFront();
-
-		if (Target && StatComp)
-		{
-			float Damage = StatComp->FinalATK * EffectVal;
-			ApplyDamageToTarget(Target, Damage, EGemType::Ruby);
-
-			if (UProject_GemCoopBuffComponent* TargetBuff = Target->FindComponentByClass<UProject_GemCoopBuffComponent>())
-			{
-				FDebuffData Burn;
-				Burn.DebuffID = TEXT("Burn");
-				Burn.DisplayName = FText::FromString(TEXT("Burn"));
-				Burn.DamagePerSec = Damage * 0.1f;
-				Burn.Duration = 3.f;
-				TargetBuff->AddDebuff(Burn);
-			}
-		}
-		break;
-	}
-
-	case EGemType::Sapphire:
-	{
-		if (BuffComp && StatComp)
-		{
-			float ShieldAmount = StatComp->FinalDEF * EffectVal;
-			BuffComp->ApplyShield(ShieldAmount);
-
-			FBuffData DefBuff;
-			DefBuff.BuffID = TEXT("SapphireDEF");
-			DefBuff.DisplayName = FText::FromString(TEXT("Sapphire DEF"));
-			DefBuff.DEFBonus = 0.5f * EffectVal;
-			DefBuff.Duration = 5.f;
-			BuffComp->AddBuff(DefBuff);
-		}
-		break;
-	}
-
-	case EGemType::Emerald:
-	{
-		if (StatComp)
-		{
-			float HealAmount = StatComp->FinalHP * 0.3f * EffectVal;
-			StatComp->ApplyHeal(HealAmount);
-
-			if (CombatComp)
-			{
-				CombatComp->RecordHeal(HealAmount);
-			}
-		}
-
-		if (BuffComp)
-		{
-			FBuffData RegenBuff;
-			RegenBuff.BuffID = TEXT("EmeraldRegen");
-			RegenBuff.DisplayName = FText::FromString(TEXT("Emerald Regen"));
-			RegenBuff.HealBonus = 0.1f;
-			RegenBuff.Duration = 5.0f;
-			BuffComp->AddBuff(RegenBuff);
-		}
-		break;
-	}
-
-	case EGemType::Topaz:
-	{
-		if (BuffComp)
-		{
-			FBuffData SpdBuff;
-			SpdBuff.BuffID = TEXT("TopazSPD");
-			SpdBuff.DisplayName = FText::FromString(TEXT("Topaz SPD"));
-			SpdBuff.SPDBonus = 0.5f * EffectVal;
-			SpdBuff.Duration = 2.f;
-			BuffComp->AddBuff(SpdBuff);
-		}
-
-		if (CombatComp)
-		{
-			CombatComp->RecordBuff();
-		}
-		break;
-	}
-
-	case EGemType::Amethyst:
-	{
-		if (BuffComp)
-		{
-			FBuffData AllBuff;
-			AllBuff.BuffID = TEXT("AmethystAll");
-			AllBuff.DisplayName = FText::FromString(TEXT("Amethyst All"));
-			AllBuff.ATKBonus = 0.25f * EffectVal;
-			AllBuff.DEFBonus = 0.25f * EffectVal;
-			AllBuff.SPDBonus = 0.25f * EffectVal;
-			AllBuff.HealBonus = 0.25f * EffectVal;
-			AllBuff.Duration = 10.f;
-			BuffComp->AddBuff(AllBuff);
-		}
-
-		if (CombatComp)
-		{
-			CombatComp->RecordBuff();
-		}
-		break;
-	}
-
-	default:
-		break;
-	}
-}
+//void UProject_GemCoopGemComponent::ApplyGemEffect(int32 SlotIndex)
+//{
+//	if (!GetOwner() || !GetOwner()->HasAuthority())
+//	{
+//		return;
+//	}
+//	
+//	if (!GemSlots.IsValidIndex(SlotIndex))
+//	{
+//		return;
+//	}
+//
+//	if (!OwnerCharacter)
+//	{
+//		return;
+//	}
+//
+//	FGemData& Gem = GemSlots[SlotIndex];
+//
+//	if (!StatComp)
+//	{
+//		return;
+//	}
+//
+//	const float DefaultBuffDuration = 5.f;
+//
+//	float EffectVal = FMath::Max(0.0f, Gem.EffectValue);
+//
+//	switch (Gem.GemType)
+//	{
+//	case EGemType::Ruby:
+//	{
+//		AActor* Target = FindTargetInFront();
+//
+//		if (Target && StatComp)
+//		{
+//			float Damage = StatComp->FinalATK * EffectVal;
+//			ApplyDamageToTarget(Target, Damage, EGemType::Ruby);
+//
+//			if (UProject_GemCoopBuffComponent* TargetBuff = Target->FindComponentByClass<UProject_GemCoopBuffComponent>())
+//			{
+//				FDebuffData Burn;
+//				Burn.DebuffID = TEXT("Burn");
+//				Burn.DisplayName = FText::FromString(TEXT("Burn"));
+//				Burn.DamagePerSec = Damage * 0.1f;
+//				Burn.Duration = 3.f;
+//				TargetBuff->AddDebuff(Burn);
+//			}
+//		}
+//		break;
+//		/*const float DamageAmount = StatComp->FinalATK * Gem.EffectValue;
+//		const float AttackRange = 1200.f;
+//
+//		const FVector Start = OwnerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, 60.f);
+//		const FVector End = Start + OwnerCharacter->GetActorForwardVector() * AttackRange;
+//
+//		FHitResult HitResult;
+//
+//		FCollisionQueryParams Params;
+//		Params.AddIgnoredActor(OwnerCharacter);
+//
+//		const bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, Start, End, ECC_Pawn, Params);
+//
+//		if (bHit && HitResult.GetActor())
+//		{
+//			UGameplayStatics::ApplyDamage(HitResult.GetActor(), DamageAmount, OwnerCharacter->GetController(), OwnerCharacter, UDamageType::StaticClass());
+//		}
+//		
+//		break;*/
+//	}
+//
+//	case EGemType::Sapphire:
+//	{
+//		if (BuffComp && StatComp)
+//		{
+//			float ShieldAmount = StatComp->FinalDEF * EffectVal;
+//			BuffComp->ApplyShield(ShieldAmount);
+//
+//			FBuffData DefBuff;
+//			DefBuff.BuffID = TEXT("SapphireDEF");
+//			DefBuff.DisplayName = FText::FromString(TEXT("Sapphire DEF"));
+//			DefBuff.DEFBonus = 0.5f * EffectVal;
+//			DefBuff.Duration = 5.f;
+//			BuffComp->AddBuff(DefBuff);
+//		}
+//		break;
+//	}
+//
+//	case EGemType::Emerald:
+//	{
+//		if (StatComp)
+//		{
+//			float HealAmount = StatComp->FinalHP * 0.3f * EffectVal;
+//			StatComp->ApplyHeal(HealAmount);
+//
+//			if (CombatComp)
+//			{
+//				CombatComp->RecordHeal(HealAmount);
+//			}
+//		}
+//
+//		if (BuffComp)
+//		{
+//			FBuffData RegenBuff;
+//			RegenBuff.BuffID = TEXT("EmeraldRegen");
+//			RegenBuff.DisplayName = FText::FromString(TEXT("Emerald Regen"));
+//			RegenBuff.HealBonus = 0.1f;
+//			RegenBuff.Duration = 5.0f;
+//			BuffComp->AddBuff(RegenBuff);
+//		}
+//		break;
+//	}
+//
+//	case EGemType::Topaz:
+//	{
+//		if (BuffComp)
+//		{
+//			FBuffData SpdBuff;
+//			SpdBuff.BuffID = TEXT("TopazSPD");
+//			SpdBuff.DisplayName = FText::FromString(TEXT("Topaz SPD"));
+//			SpdBuff.SPDBonus = 0.5f * EffectVal;
+//			SpdBuff.Duration = 2.f;
+//			BuffComp->AddBuff(SpdBuff);
+//		}
+//
+//		if (CombatComp)
+//		{
+//			CombatComp->RecordBuff();
+//		}
+//		break;
+//	}
+//
+//	case EGemType::Amethyst:
+//	{
+//		if (BuffComp)
+//		{
+//			FBuffData AllBuff;
+//			AllBuff.BuffID = TEXT("AmethystAll");
+//			AllBuff.DisplayName = FText::FromString(TEXT("Amethyst All"));
+//			AllBuff.ATKBonus = 0.25f * EffectVal;
+//			AllBuff.DEFBonus = 0.25f * EffectVal;
+//			AllBuff.SPDBonus = 0.25f * EffectVal;
+//			AllBuff.HealBonus = 0.25f * EffectVal;
+//			AllBuff.Duration = 10.f;
+//			BuffComp->AddBuff(AllBuff);
+//		}
+//
+//		if (CombatComp)
+//		{
+//			CombatComp->RecordBuff();
+//		}
+//		break;
+//	}
+//
+//	default:
+//		break;
+//	}
+//}
 
 AActor* UProject_GemCoopGemComponent::FindTargetInFront() const
 {
@@ -744,5 +830,527 @@ void UProject_GemCoopGemComponent::RefillDefaultGemsFromDataTable()
 	if (bDebugLog)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Equipped gems loaded into battle slots from GameInstance."));
+	}
+}
+
+//bool UProject_GemCoopGemComponent::UseGem_Internal(int32 SlotIndex)
+//{
+//	if (!GetOwner() || !GetOwner()->HasAuthority())
+//	{
+//		return false;
+//	}
+//
+//	if (!GemSlots.IsValidIndex(SlotIndex))
+//	{
+//		return false;
+//	}
+//
+//	if (!SlotCooldowns.IsValidIndex(SlotIndex))
+//	{
+//		return false;
+//	}
+//
+//	if (SlotCooldowns[SlotIndex] > 0.0f)
+//	{
+//		return false;
+//	}
+//
+//	const FGemData& Gem = GemSlots[SlotIndex];
+//
+//	if (Gem.GemID.IsNone() || Gem.GemType == EGemType::None)
+//	{
+//		return false;
+//	}
+//
+//	if (!EnergySYComp)
+//	{
+//		EnergySYComp = GetOwner()->FindComponentByClass<UProject_GemCoopEnergySYComponent>();
+//	}
+//
+//	if (!EnergySYComp)
+//	{
+//		return false;
+//	}
+//
+//	if (!EnergySYComp->HasEnoughEnergy(Gem.EnergyCost))
+//	{
+//		return false;
+//	}
+//
+//	PendingUseSlot = SlotIndex;
+//
+//	if (CombatComp)
+//	{
+//		CombatComp->StartCasting(DefaultGemCastTime);
+//	}
+//	else
+//	{
+//		OnCastingCompleted();
+//	}
+//
+//	return true;
+//}
+
+//void UProject_GemCoopGemComponent::OnCastingCompleted()
+//{
+//	if (!GetOwner() || !GetOwner()->HasAuthority())
+//	{
+//		return;
+//	}
+//
+//	if (!GemSlots.IsValidIndex(PendingUseSlot))
+//	{
+//		PendingUseSlot = -1;
+//		return;
+//	}
+//
+//	if (!EnergySYComp)
+//	{
+//		EnergySYComp = GetOwner()->FindComponentByClass<UProject_GemCoopEnergySYComponent>();
+//	}
+//
+//	if (!EnergySYComp)
+//	{
+//		PendingUseSlot = -1;
+//		return;
+//	}
+//
+//	const FGemData Gem = GemSlots[PendingUseSlot];
+//
+//	if (!EnergySYComp->TryConsumeEnergy(Gem.EnergyCost))
+//	{
+//		PendingUseSlot = -1;
+//		return;
+//	}
+//
+//	EnergySYComp->ChargeUltGauge(Gem.EnergyCost);
+//
+//	ApplyGemEffect(PendingUseSlot);
+//
+//	if (FusionSYComp)
+//	{
+//		//FusionSYComp->RegisterGemUseForFusion(PendingUseSlot, GemSlots[PendingUseSlot]);
+//	}
+//
+//	StartCooldown(PendingUseSlot);
+//
+//	OnGemUsed.Broadcast(PendingUseSlot, GemSlots[PendingUseSlot]);
+//
+//	PendingUseSlot = -1;
+//}
+
+void UProject_GemCoopGemComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UProject_GemCoopGemComponent, SlotCooldownEndTimes);
+}
+
+void UProject_GemCoopGemComponent::OnRep_CooldownEndTimes()
+{
+	UE_LOG(LogTemp, Warning, TEXT("OnRep_CooldownEndTimes. Owner=%s SlotCount=%d"),
+		*GetNameSafe(GetOwner()),
+		SlotCooldownEndTimes.Num()
+	);
+}
+
+float UProject_GemCoopGemComponent::GetServerTimeSeconds() const
+{
+	if (!GetWorld())
+	{
+		return 0.0f;
+	}
+
+	AGameStateBase* GS = GetWorld()->GetGameState();
+
+	if (GS)
+	{
+		return GS->GetServerWorldTimeSeconds();
+	}
+
+	return GetWorld()->GetTimeSeconds();
+}
+
+float UProject_GemCoopGemComponent::GetGemCooldownBySlot(int32 SlotIndex) const
+{
+	if (!GemSlots.IsValidIndex(SlotIndex))
+	{
+		return 0.0f;
+	}
+
+	return GemSlots[SlotIndex].Cooldown;
+}
+
+float UProject_GemCoopGemComponent::GetSlotCooldownRemaining(int32 SlotIndex) const
+{
+	if (!SlotCooldownEndTimes.IsValidIndex(SlotIndex))
+	{
+		return 0.0f;
+	}
+
+	const float Remaining = SlotCooldownEndTimes[SlotIndex] - GetServerTimeSeconds();
+
+	return FMath::Max(0.0f, Remaining);
+}
+
+float UProject_GemCoopGemComponent::GetSlotCooldownPercent(int32 SlotIndex) const
+{
+	const float Cooldown = GetGemCooldownBySlot(SlotIndex);
+
+	if (Cooldown <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(GetSlotCooldownRemaining(SlotIndex) / Cooldown, 0.0f, 1.f);
+}
+
+float UProject_GemCoopGemComponent::GetSlotCooldownFillPercent(int32 SlotIndex) const
+{
+	return 1.f - GetSlotCooldownPercent(SlotIndex);
+}
+
+bool UProject_GemCoopGemComponent::UseGem(int32 SlotIndex)
+{
+	AActor* OwnerActor = GetOwner();
+
+	if (!OwnerActor)
+	{
+		return false;
+	}
+
+	if (!OwnerActor->HasAuthority())
+	{
+		return false;
+	}
+
+	return UseGem_Internal(SlotIndex);
+}
+
+bool UProject_GemCoopGemComponent::UseGem_Internal(int32 SlotIndex)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return false;
+	}
+
+	if (!GemSlots.IsValidIndex(SlotIndex))
+	{
+		return false;
+	}
+
+	const int32 DesiredSlotCount = FMath::Max(3, GemSlots.Num());
+
+	if (SlotCooldowns.Num() != DesiredSlotCount)
+	{
+		SlotCooldowns.SetNum(DesiredSlotCount);
+	}
+
+	if (SlotCooldownEndTimes.Num() != DesiredSlotCount)
+	{
+		SlotCooldownEndTimes.SetNum(DesiredSlotCount);
+	}
+
+	const float RemainingCooldown = GetSlotCooldownRemaining(SlotIndex);
+
+	if (RemainingCooldown > 0.0f)
+	{
+		return false;
+	}
+
+	const FGemData& Gem = GemSlots[SlotIndex];
+
+	if (Gem.GemID.IsNone() || Gem.GemType == EGemType::None)
+	{
+		return false;
+	}
+
+	if (!EnergySYComp)
+	{
+		EnergySYComp = GetOwner()->FindComponentByClass<UProject_GemCoopEnergySYComponent>();
+	}
+
+	if (!EnergySYComp)
+	{
+		return false;
+	}
+
+	if (!EnergySYComp->HasEnoughEnergy(Gem.EnergyCost))
+	{
+		return false;
+	}
+
+	PendingUseSlot = SlotIndex;
+
+	const float CastTime = DefaultGemCastTime;
+
+	if (!CombatComp)
+	{
+		CombatComp = GetOwner()->FindComponentByClass<UProject_GemCoopCombatComponent>();
+	}
+
+	if (CombatComp)
+	{
+		CombatComp->StartCasting(CastTime);
+	}
+	else
+	{
+		OnCastingCompleted();
+	}
+
+	return true;
+}
+
+void UProject_GemCoopGemComponent::OnCastingCompleted()
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	if (!GemSlots.IsValidIndex(PendingUseSlot))
+	{
+		PendingUseSlot = -1;
+		return;
+	}
+
+	if (!EnergySYComp)
+	{
+		EnergySYComp = GetOwner()->FindComponentByClass<UProject_GemCoopEnergySYComponent>();
+	}
+
+	if (!EnergySYComp)
+	{
+		PendingUseSlot = -1;
+		return;
+	}
+
+	const FGemData Gem = GemSlots[PendingUseSlot];
+
+	if (!EnergySYComp->TryConsumeEnergy(Gem.EnergyCost))
+	{
+		PendingUseSlot = -1;
+		return;
+	}
+
+	EnergySYComp->ChargeUltGauge(Gem.EnergyCost);
+
+	ApplyGemEffect(PendingUseSlot);
+
+	if (!FusionSYComp)
+	{
+		FusionSYComp = GetOwner()->FindComponentByClass<UProject_GemCoopFusionSYComponent>();
+	}
+
+	if (FusionSYComp)
+	{
+		//FusionSYComp->RegisterGemUseForFusion(PendingUseSlot, GemSlots[PendingUseSlot]);
+	}
+
+	StartCooldown(PendingUseSlot);
+
+	OnGemUsed.Broadcast(PendingUseSlot, GemSlots[PendingUseSlot]);
+
+	PendingUseSlot = -1;
+}
+
+void UProject_GemCoopGemComponent::StartCooldown(int32 SlotIndex)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	if (!GemSlots.IsValidIndex(SlotIndex))
+	{
+		return;
+	}
+
+	const int32 DesiredSlotCount = FMath::Max(3, GemSlots.Num());
+
+	if (SlotCooldowns.Num() != DesiredSlotCount)
+	{
+		SlotCooldowns.SetNum(DesiredSlotCount);
+	}
+
+	if (SlotCooldownEndTimes.Num() != DesiredSlotCount)
+	{
+		SlotCooldownEndTimes.SetNum(DesiredSlotCount);
+	}
+
+	const float Cooldown = GetGemCooldownBySlot(SlotIndex);
+
+	if (Cooldown <= 0.0f)
+	{
+		SlotCooldowns[SlotIndex] = 0.0f;
+		SlotCooldownEndTimes[SlotIndex] = 0.0f;
+		return;
+	}
+
+	SlotCooldownEndTimes[SlotIndex] = GetServerTimeSeconds() + Cooldown;
+	SlotCooldowns[SlotIndex] = Cooldown;
+
+	OnRep_CooldownEndTimes();
+
+	if (GetOwner())
+	{
+		GetOwner()->ForceNetUpdate();
+	}
+}
+
+void UProject_GemCoopGemComponent::ApplyGemEffect(int32 SlotIndex)
+{
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	if (!GemSlots.IsValidIndex(SlotIndex))
+	{
+		return;
+	}
+
+	OwnerCharacter = Cast<AProject_GemCoopCharacter>(GetOwner());
+
+	if (!OwnerCharacter)
+	{
+		return;
+	}
+
+	const FGemData& Gem = GemSlots[SlotIndex];
+
+	if (Gem.GemID.IsNone() || Gem.GemType == EGemType::None)
+	{
+		return;
+	}
+
+	StatComp = OwnerCharacter->FindComponentByClass<UProject_GemCoopStatComponent>();
+	BuffComp = OwnerCharacter->FindComponentByClass<UProject_GemCoopBuffComponent>();
+
+	if (!StatComp)
+	{
+		return;
+	}
+
+	const float DefaultBuffDuration = 5.f;
+
+	switch (Gem.GemType)
+	{
+	case EGemType::Ruby:
+	{
+		const float AttackRange = 1200.f;
+		const float DamageAmount = StatComp->FinalATK * Gem.EffectValue;
+
+		const FVector StartLocation = OwnerCharacter->GetActorLocation() + FVector(0.0f, 0.0f, 60.f);
+
+		const FVector AttackDirection = OwnerCharacter->GetActorForwardVector();
+		const FVector EndLocation = StartLocation + AttackDirection * AttackRange;
+
+		FHitResult HitResult;
+
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(OwnerCharacter);
+		QueryParams.bTraceComplex = false;
+
+		const bool bHit = GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECC_Pawn, QueryParams);
+
+		if (bHit && HitResult.GetActor())
+		{
+			AActor* HitActor = HitResult.GetActor();
+
+			UGameplayStatics::ApplyDamage(HitActor, DamageAmount, OwnerCharacter->GetController(), OwnerCharacter, UDamageType::StaticClass());
+		}
+
+		break;
+	}
+
+	case EGemType::Sapphire:
+	{
+		if (!BuffComp)
+		{
+			return;
+		}
+
+		FBuffData BuffData;
+		BuffData.BuffID = TEXT("Buff_Sapphire_Defense");
+		BuffData.DisplayName = FText::FromString(TEXT("Sapphire Defense"));
+		BuffData.Duration = DefaultBuffDuration;
+		BuffData.DEFBonus = 0.5f * Gem.EffectValue;
+
+		BuffComp->AddBuff(BuffData);
+
+		if (CombatComp)
+		{
+			CombatComp->RecordBuff();
+		}
+
+		break;
+	}
+
+	case EGemType::Emerald:
+	{
+		const float HealAmount = StatComp->FinalHP * 0.3f * Gem.EffectValue;
+
+		StatComp->ApplyHeal(HealAmount);
+
+		break;
+	}
+
+	case EGemType::Topaz:
+	{
+		const float BonusHP = 30.f * Gem.EffectValue;
+
+		StatComp->AddTemporaryMaxHP(BonusHP, true);
+
+		if (BuffComp)
+		{
+			FBuffData BuffData;
+			BuffData.BuffID = TEXT("Buff_Topaz_Speed");
+			BuffData.DisplayName = FText::FromString(TEXT("Topaz Speed"));
+			BuffData.Duration = DefaultBuffDuration;
+			BuffData.SPDBonus = 0.15f * Gem.EffectValue;
+
+			BuffComp->AddBuff(BuffData);
+
+			if (CombatComp)
+			{
+				CombatComp->RecordBuff();
+			}
+		}
+
+		break;
+	}
+
+	case EGemType::Amethyst:
+	{
+		if (!BuffComp)
+		{
+			return;
+		}
+
+		FBuffData BuffData;
+		BuffData.BuffID = TEXT("Buff_Amethyst_Amplify");
+		BuffData.DisplayName = FText::FromString(TEXT("Amethyst Amplify"));
+		BuffData.Duration = DefaultBuffDuration;
+
+		BuffData.ATKBonus = 0.2f * Gem.EffectValue;
+		BuffData.DEFBonus = 0.2f * Gem.EffectValue;
+		BuffData.SPDBonus = 0.1f * Gem.EffectValue;
+		BuffData.HealBonus = 0.1f * Gem.EffectValue;
+
+		BuffComp->AddBuff(BuffData);
+
+		const float HealAmount = StatComp->FinalHP * 0.1f * Gem.EffectValue;
+		StatComp->ApplyHeal(HealAmount);
+
+		if (CombatComp)
+		{
+			CombatComp->RecordBuff();
+		}
+
+		break;
+	}
+	default:
+		break;
 	}
 }

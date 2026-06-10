@@ -2,6 +2,7 @@
 
 
 #include "Project_GemCoopStatComponent.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values for this component's properties
 UProject_GemCoopStatComponent::UProject_GemCoopStatComponent()
@@ -10,6 +11,7 @@ UProject_GemCoopStatComponent::UProject_GemCoopStatComponent()
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
 
+    SetIsReplicatedByDefault(true);
 	// ...
 }
 
@@ -76,11 +78,17 @@ void UProject_GemCoopStatComponent::ApplyDamage(float Amount)
 
 void UProject_GemCoopStatComponent::ApplyHeal(float Amount)
 {
-    if (bIsDead || Amount <= 0.f) return;
+    if (!GetOwner() || !GetOwner()->HasAuthority())
+    {
+        return;
+    }
 
-    // 힐 효과 배율 적용 (SUPPORT 특성 보정)
-    float ActualHeal = Amount * CurrentModifier.HealMultiplier;
-    CurrentHP = FMath::Clamp(CurrentHP + ActualHeal, 0.f, FinalHP);
+    if (Amount <= 0.0f || bIsDead)
+    {
+        return;
+    }
+
+    CurrentHP = FMath::Clamp(CurrentHP + Amount, 0.0f, FinalHP);
 
     OnHPChanged.Broadcast(CurrentHP, FinalHP);
 }
@@ -148,4 +156,52 @@ void UProject_GemCoopStatComponent::HandleDeath()
     bIsDead = true;
 
     OnDeath.Broadcast();
+}
+
+void UProject_GemCoopStatComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+    Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+    DOREPLIFETIME(UProject_GemCoopStatComponent, CurrentHP);
+    DOREPLIFETIME(UProject_GemCoopStatComponent, FinalHP);
+    DOREPLIFETIME(UProject_GemCoopStatComponent, bIsDead);
+}
+
+void UProject_GemCoopStatComponent::OnRep_HP()
+{
+    OnHPChanged.Broadcast(CurrentHP, FinalHP);
+}
+
+void UProject_GemCoopStatComponent::OnRep_DeathState()
+{
+    if (bIsDead)
+    {
+        OnDeath.Broadcast();
+    }
+}
+
+void UProject_GemCoopStatComponent::AddTemporaryMaxHP(float Amount, bool bAlsoHeal)
+{
+    if (!GetOwner() || !GetOwner()->HasAuthority())
+    {
+        return;
+    }
+
+    if (Amount <= 0.0f)
+    {
+        return;
+    }
+
+    const float OldFinalHP = FinalHP;
+
+    CurrentModifier.HPMultiplier += Amount;
+    RecalculateFinalStats();
+
+    if (bAlsoHeal)
+    {
+        const float DeltaMaxHP = FinalHP - OldFinalHP;
+        CurrentHP = FMath::Clamp(CurrentHP + DeltaMaxHP, 0.0f, FinalHP);
+    }
+
+    OnHPChanged.Broadcast(CurrentHP, FinalHP);
 }

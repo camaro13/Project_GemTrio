@@ -2,7 +2,8 @@
 
 
 #include "Project_GemCoopEnergySYComponent.h"
-#include "Project_GemCoopGameStateBase.h"
+#include "Net/UnrealNetwork.h"
+#include "GameFramework/Actor.h"
 #include "Kismet/GameplayStatics.h"
 
 // Sets default values for this component's properties
@@ -12,10 +13,12 @@ UProject_GemCoopEnergySYComponent::UProject_GemCoopEnergySYComponent()
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
 
+	SetIsReplicatedByDefault(true);
+
 	GameStateRef = nullptr;
 
-	CachedSharedEnergy = 0.0f;
-	CachedMaxSharedEnergy = 100.0f;
+	CachedEnergy = 0.0f;
+	CachedMaxEnergy = 100.0f;
 
 	EnergyRegenMultiplier = 1.0f;
 	SafeZoneRegenBonus = 2.0f;
@@ -32,38 +35,76 @@ UProject_GemCoopEnergySYComponent::UProject_GemCoopEnergySYComponent()
 void UProject_GemCoopEnergySYComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	GameStateRef = GetWorld() ? GetWorld()->GetGameState<AProject_GemCoopGameStateBase>() : nullptr;
 	
-	if (GameStateRef)
+	if (GetOwner() && GetOwner()->HasAuthority())
 	{
-		CachedSharedEnergy = GameStateRef->SharedEnergy;
-		CachedMaxSharedEnergy = GameStateRef->MaxSharedEnergy;
-
-		GameStateRef->OnSharedEnergyChanged.AddDynamic(this, &UProject_GemCoopEnergySYComponent::OnGameStateEnergyChanged);
-
-		OnEnergyChanged.Broadcast(CachedSharedEnergy, CachedMaxSharedEnergy);
+		CachedEnergy = FMath::Clamp(CachedEnergy, 0.0f, CachedMaxEnergy);
+		UltGaugeContribution = FMath::Clamp(UltGaugeContribution, 0.0f, MaxUltGauge);
+		bUltimateReady = UltGaugeContribution >= MaxUltGauge;
 	}
+
+	OnEnergyChanged.Broadcast(CachedEnergy, CachedMaxEnergy);
+	OnUltGaugeChanged.Broadcast(GetUltGaugePercent());
 	// ...
 }
-
 
 // Called every frame
 void UProject_GemCoopEnergySYComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
+	if (CachedEnergy >= CachedMaxEnergy)
+	{
+		return;
+	}
+
+	float FinalRegenMultiplier = EnergyRegenMultiplier;
+
+	if (bInSafeZone)
+	{
+		FinalRegenMultiplier += SafeZoneRegenBonus;
+	}
+
+	const float RegenAmount = FinalRegenMultiplier * DeltaTime;
+
+	if (RegenAmount > 0.0f)
+	{
+		SetEnergy_Server(CachedEnergy + RegenAmount);
+	}
 	//SyncWithGameState();
 	// ...
 }
 
+void UProject_GemCoopEnergySYComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UProject_GemCoopEnergySYComponent, CachedEnergy);
+	DOREPLIFETIME(UProject_GemCoopEnergySYComponent, CachedMaxEnergy);
+	DOREPLIFETIME(UProject_GemCoopEnergySYComponent, bInSafeZone);
+	DOREPLIFETIME(UProject_GemCoopEnergySYComponent, UltGaugeContribution);
+	DOREPLIFETIME(UProject_GemCoopEnergySYComponent, bUltimateReady);
+}
+
+void UProject_GemCoopEnergySYComponent::OnRep_Energy()
+{
+	OnEnergyChanged.Broadcast(CachedEnergy, CachedMaxEnergy);
+}
+
+void UProject_GemCoopEnergySYComponent::OnRep_UltGauge()
+{
+	OnUltGaugeChanged.Broadcast(GetUltGaugePercent());
+}
+
 bool UProject_GemCoopEnergySYComponent::TryConsumeEnergy(float Amount)
 {
-	SyncWithGameState();
-
-	if (!GameStateRef)
+	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EnergySYComponent: GameStateRef missing."));
 		return false;
 	}
 
@@ -74,127 +115,100 @@ bool UProject_GemCoopEnergySYComponent::TryConsumeEnergy(float Amount)
 
 	if (!HasEnoughEnergy(Amount))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Energy not enough. Required %.1f / Current %.1f"),
-			Amount,
-			CachedSharedEnergy
-		);
-
-		OnEnergyInsufficient.Broadcast(Amount, CachedSharedEnergy);
+		OnEnergyInsufficient.Broadcast(Amount, CachedEnergy);
 		return false;
 	}
 
-	if (GameStateRef->HasAuthority())
-	{
-		bool bConsumed = GameStateRef->ConsumeEnergy(Amount);
+	SetEnergy_Server(CachedEnergy - Amount);
 
-		if (bConsumed)
-		{
-			ChargeUltGauge(UltGaugeChargeRate);
-		}
-
-		return bConsumed;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("Energy consume requested on client. Server RPC not implemented yet."));
-	return false;
+	return true;
 }
 
 bool UProject_GemCoopEnergySYComponent::HasEnoughEnergy(float Amount) const
 {
-	return CachedSharedEnergy >= Amount;
+	return CachedEnergy >= Amount;
 }
 
-void UProject_GemCoopEnergySYComponent::SyncWithGameState()
+void UProject_GemCoopEnergySYComponent::SetEnergy_Server(float NewEnergy)
 {
-	if (!GameStateRef && GetWorld())
-	{
-		GameStateRef = GetWorld()->GetGameState<AProject_GemCoopGameStateBase>();
-	}
-
-	if (!GameStateRef)
+	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
 	}
 
-	CachedSharedEnergy = GameStateRef->SharedEnergy;
-	CachedMaxSharedEnergy = GameStateRef->MaxSharedEnergy;
+	CachedEnergy = FMath::Clamp(NewEnergy, 0.0f, CachedMaxEnergy);
+
+	OnEnergyChanged.Broadcast(CachedEnergy, CachedMaxEnergy);
+}
+
+void UProject_GemCoopEnergySYComponent::SyncWithUI()
+{
+	OnEnergyChanged.Broadcast(CachedEnergy, CachedMaxEnergy);
+	OnUltGaugeChanged.Broadcast(GetUltGaugePercent());
 }
 
 void UProject_GemCoopEnergySYComponent::OnGameStateEnergyChanged(float CurrentEnergy, float MaxEnergy)
 {
-	CachedSharedEnergy = CurrentEnergy;
-	CachedMaxSharedEnergy = MaxEnergy;
-
-	OnEnergyChanged.Broadcast(CachedSharedEnergy, CachedMaxSharedEnergy);
+	
 }
-
-//void UProject_GemCoopEnergySYComponent::ServerRPC_ConsumeEnergy_Implementation(float Amount)
-//{
-//	if (GameStateRef)
-//	{
-//		GameStateRef->ConsumeEnergy(Amount);
-//	}
-//}
 
 void UProject_GemCoopEnergySYComponent::OnEnergyChangedCallback(float NewEnergy)
 {
-	CachedSharedEnergy = NewEnergy;
 
-	OnEnergyChanged.Broadcast(CachedSharedEnergy, CachedMaxSharedEnergy);
 }
 
 float UProject_GemCoopEnergySYComponent::GetCurrentEnergy() const
 {
-	return CachedSharedEnergy;
+	return CachedEnergy;
+}
+
+float UProject_GemCoopEnergySYComponent::GetMaxEnergy() const
+{
+	return CachedMaxEnergy;
 }
 
 float UProject_GemCoopEnergySYComponent::GetEnergyPercent() const
 {
-	float MaxEnergy = GameStateRef ? GameStateRef->MaxSharedEnergy : 100.f;
-	return MaxEnergy > 0.f ? CachedSharedEnergy / MaxEnergy : 0.f;
+	if (CachedMaxEnergy <= 0.0f)
+	{
+		return 0.0f;
+	}
+
+	return FMath::Clamp(CachedEnergy / CachedMaxEnergy, 0.0f, 1.f);
 }
 
 void UProject_GemCoopEnergySYComponent::ApplySafeZoneBonus(bool bEntering)
 {
-	bInSafeZone = bEntering;
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
 
-	UE_LOG(LogTemp, Warning, TEXT("EnergySYComponent SafeZone Bonus: %s"),
-		bInSafeZone ? TEXT("ON") : TEXT("OFF")
-	);
+	bInSafeZone = bEntering;
 }
 
 void UProject_GemCoopEnergySYComponent::ChargeUltGauge(float Amount)
 {
+	if (!GetOwner() || !GetOwner()->HasAuthority())
+	{
+		return;
+	}
+
 	if (Amount <= 0.0f)
 	{
 		return;
 	}
 
-	if (bUltimateReady)
-	{
-		return;
-	}
+	UltGaugeContribution = FMath::Clamp(UltGaugeContribution + Amount * UltGaugeChargeRate, 0.0f, MaxUltGauge);
 
-	UltGaugeContribution = FMath::Clamp(UltGaugeContribution + Amount, 0.0f, MaxUltGauge);
-
-	if (UltGaugeContribution >= MaxUltGauge)
-	{
-		UltGaugeContribution = MaxUltGauge;
-		bUltimateReady = true;
-	}
+	bUltimateReady = UltGaugeContribution >= MaxUltGauge;
 
 	OnUltGaugeChanged.Broadcast(GetUltGaugePercent());
-
-	UE_LOG(LogTemp, Warning, TEXT("UltGauge Charged: %.1f / %.1f Ready=%d"),
-		UltGaugeContribution,
-		MaxUltGauge,
-		bUltimateReady
-	);
 }
 
 void UProject_GemCoopEnergySYComponent::ConsumeUltGauge()
 {
-	if (!bUltimateReady)
+	if (!GetOwner() || !GetOwner()->HasAuthority())
 	{
 		return;
 	}
@@ -203,8 +217,6 @@ void UProject_GemCoopEnergySYComponent::ConsumeUltGauge()
 	bUltimateReady = false;
 
 	OnUltGaugeChanged.Broadcast(GetUltGaugePercent());
-
-	UE_LOG(LogTemp, Warning, TEXT("Ultimate Gauge Consumed."));
 }
 
 float UProject_GemCoopEnergySYComponent::GetUltGaugePercent() const
@@ -214,5 +226,5 @@ float UProject_GemCoopEnergySYComponent::GetUltGaugePercent() const
 		return 0.0f;
 	}
 
-	return UltGaugeContribution / MaxUltGauge;
+	return FMath::Clamp(UltGaugeContribution / MaxUltGauge, 0.0f, 1.f);
 }

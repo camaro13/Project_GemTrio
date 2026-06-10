@@ -2,17 +2,21 @@
 
 
 #include "Project_GemCoopProjectile.h"
-
+#include "Project_GemCoopCharacter.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Net/UnrealNetwork.h"
 
 // Sets default values
 AProject_GemCoopProjectile::AProject_GemCoopProjectile()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
+
 	bReplicates = true;
+	SetReplicateMovement(true);
 
 	CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComp"));
 	SetRootComponent(CollisionComp);
@@ -24,6 +28,10 @@ AProject_GemCoopProjectile::AProject_GemCoopProjectile()
 	CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	CollisionComp->SetCollisionResponseToChannel(ECC_WorldStatic, ECR_Block);
 
+	MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
+	MeshComp->SetupAttachment(CollisionComp);
+	MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 	CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AProject_GemCoopProjectile::OnProjectileOverlap);
 
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
@@ -31,6 +39,7 @@ AProject_GemCoopProjectile::AProject_GemCoopProjectile()
 	ProjectileMovement->MaxSpeed = 1800.f;
 	ProjectileMovement->bRotationFollowsVelocity = true;
 	ProjectileMovement->ProjectileGravityScale = 0.0f;
+	ProjectileMovement->SetIsReplicated(true);
 
 	InitialLifeSpan = LifeTime;
 }
@@ -40,7 +49,18 @@ void AProject_GemCoopProjectile::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	SetLifeSpan(LifeTime);
+	if (CollisionComp)
+	{
+		CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AProject_GemCoopProjectile::OnProjectileOverlap);
+	}
+}
+
+void AProject_GemCoopProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	//DOREPLIFETIME(AProject_GemCoopProjectile, Damage);
+	//DOREPLIFETIME(AProject_GemCoopProjectile, MoveDirection);
 }
 
 // Called every frame
@@ -50,24 +70,48 @@ void AProject_GemCoopProjectile::Tick(float DeltaTime)
 
 }
 
-void AProject_GemCoopProjectile::InitializeProjectile(float InDamage, FVector Direction, AActor* InOwner)
+void AProject_GemCoopProjectile::InitializeProjectile(float InDamage, FVector InDirection, AProject_GemCoopCharacter* InOwnerCharacter)
 {
 	Damage = InDamage;
-	DamageOwner = InOwner;
+	
+	MoveDirection = InDirection; 
+	MoveDirection.Z = 0.0f;
+
+	if (!MoveDirection.IsNearlyZero())
+	{
+		MoveDirection.Normalize();
+	}
+	else
+	{
+		MoveDirection = FVector::ForwardVector;
+	}
+
+	OwnerCharacter = InOwnerCharacter;
+
+	SetOwner(InOwnerCharacter);
+	SetInstigator(InOwnerCharacter);
 
 	if (ProjectileMovement)
 	{
-		ProjectileMovement->Velocity = Direction.GetSafeNormal() * ProjectileMovement->InitialSpeed;
+		ProjectileMovement->Velocity = MoveDirection * ProjectileMovement->InitialSpeed;
 	}
+
+	SetActorRotation(MoveDirection.Rotation());
 }
 
 void AProject_GemCoopProjectile::OnProjectileOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	APawn* OwnerPawn = Cast<APawn>(DamageOwner);
-	AController* OwnerController = OwnerPawn ? OwnerPawn->GetController() : nullptr;
+	if (!HasAuthority())
+	{
+		return;
+	}
 
-	UGameplayStatics::ApplyDamage(OtherActor, Damage, OwnerController, DamageOwner, nullptr);
+	if (!OtherActor || OtherActor == this || OtherActor == OwnerCharacter)
+	{
+		return;
+	}
+
+	UGameplayStatics::ApplyDamage(OtherActor, Damage, OwnerCharacter ? OwnerCharacter->GetController() : nullptr, this, UDamageType::StaticClass());
 
 	Destroy();
 }
-

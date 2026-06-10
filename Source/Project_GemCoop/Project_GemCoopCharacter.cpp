@@ -7,6 +7,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
@@ -28,6 +29,14 @@ AProject_GemCoopCharacter::AProject_GemCoopCharacter()
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
+
+	PrimaryActorTick.bCanEverTick = true;
+
+	bReplicates = true;
+	SetReplicateMovement(true);
+
+	NetUpdateFrequency = 60.f;
+	MinNetUpdateFrequency = 30.f;
 		
 	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
@@ -35,6 +44,7 @@ AProject_GemCoopCharacter::AProject_GemCoopCharacter()
 	bUseControllerRotationRoll = false;
 
 	// Configure character movement
+	GetCharacterMovement()->SetIsReplicated(true);
 	GetCharacterMovement()->bOrientRotationToMovement = false;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
 
@@ -181,6 +191,11 @@ void AProject_GemCoopCharacter::Tick(float DeltaTime)
 		return;
 	}
 
+	if (IsLocallyControlled())
+	{
+		UpdateAimToMouse();
+	}
+
 	if (BasicAttackCooldownTimer > 0.0f)
 	{
 		BasicAttackCooldownTimer = FMath::Max(0.0f, BasicAttackCooldownTimer - DeltaTime);
@@ -218,7 +233,6 @@ void AProject_GemCoopCharacter::Tick(float DeltaTime)
 
 	UpdateWalkSpeedByState();
 }
-
 
 void AProject_GemCoopCharacter::BeginPlay()
 {
@@ -259,6 +273,60 @@ void AProject_GemCoopCharacter::BeginPlay()
 	UpdateWalkSpeedByState();
 
 	UE_LOG(LogProject_GemCoop, Log, TEXT("GemCoopCharacter BeginPlay Complete. HP: %.1f / %.1f"), GetCurrentHP(), GetMaxHP());
+}
+
+void AProject_GemCoopCharacter::RequestBasicAttack(FVector AttackDirection)
+{
+	if (AttackDirection.IsNearlyZero())
+	{
+		return;
+	}
+
+	AttackDirection.Z = 0.0f;
+	AttackDirection.Normalize();
+
+	RequestSetAimYaw(AttackDirection.Rotation().Yaw);
+
+	if (HasAuthority())
+	{
+		BasicAttack_ServerOnly(AttackDirection);
+	}
+	else
+	{
+		ServerRequestBasicAttack(AttackDirection);
+	}
+}
+
+void AProject_GemCoopCharacter::RequestSetAimYaw(float NewYaw)
+{
+	FRotator NewRotation = GetActorRotation();
+	NewRotation.Pitch = 0.0f;
+	NewRotation.Roll = 0.0f;
+	NewRotation.Yaw = NewYaw;
+
+	SetActorRotation(NewRotation);
+
+	if (!HasAuthority())
+	{
+		const float DeltaYaw = FMath::Abs(FMath::FindDeltaAngleDegrees(LastSentAimYaw, NewYaw));
+
+		if (!bHasSentAimYaw || DeltaYaw >= AimYawSendThreshold)
+		{
+			LastSentAimYaw = NewYaw;
+			bHasSentAimYaw = true;
+
+			ServerSetAimYaw(NewYaw);
+		}
+	}
+}
+
+void AProject_GemCoopCharacter::ServerRequestBasicAttack_Implementation(FVector_NetQuantizeNormal AttackDirection)
+{
+	FVector Direction = FVector(AttackDirection);
+	Direction.Z = 0.0f;
+	Direction.Normalize();
+
+	BasicAttack_ServerOnly(Direction);
 }
 
 void AProject_GemCoopCharacter::ApplyZoneEffect(EArenaZone NewZone)
@@ -434,7 +502,14 @@ void AProject_GemCoopCharacter::DashEnd()
 
 void AProject_GemCoopCharacter::OnBasicAttackInput()
 {
-	BasicAttack();
+	FVector AttackDirection;
+
+	if (!GetMouseAimDirection(AttackDirection))
+	{
+		return;
+	}
+
+	RequestBasicAttack(AttackDirection);
 }
 
 void AProject_GemCoopCharacter::BasicAttack()
@@ -541,30 +616,105 @@ void AProject_GemCoopCharacter::MeleeAttack(const FVector& AttackDirection)
 	);
 }
 
-void AProject_GemCoopCharacter::UpdateAimToMouse()
+void AProject_GemCoopCharacter::ServerSetAimYaw_Implementation(float NewYaw)
 {
-	if (!IsLocallyControlled())
+	FRotator NewRotation = GetActorRotation();
+	NewRotation.Pitch = 0.0f;
+	NewRotation.Roll = 0.0f;
+	NewRotation.Yaw = NewYaw;
+
+	SetActorRotation(NewRotation);
+}
+
+void AProject_GemCoopCharacter::BasicAttack_ServerOnly(FVector AttackDirection)
+{
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	FVector MouseWorldLocation;
-
-	if (!GetMouseWorldLocation(MouseWorldLocation))
+	if (!GetWorld())
 	{
 		return;
 	}
 
-	FVector Direction = MouseWorldLocation - GetActorLocation();
+	if (!ProjectileClass)
+	{
+		return;
+	}
+
+	AttackDirection.Z = 0.0f;
+	AttackDirection.Normalize();
+
+	SetActorRotation(AttackDirection.Rotation());
+
+	const FVector SpawnLocation = GetActorLocation() + AttackDirection * BasicAttackSpawnDistance + FVector(0.0f, 0.0f, 60.f);
+	
+	const FRotator SpawnRotation = AttackDirection.Rotation();
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = this;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	AProject_GemCoopProjectile* Projectile = GetWorld()->SpawnActor<AProject_GemCoopProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, SpawnParams);
+
+	if (Projectile)
+	{
+		Projectile->InitializeProjectile(BasicAttackDamage, AttackDirection, this);
+	}
+}
+
+bool AProject_GemCoopCharacter::GetMouseAimDirection(FVector& OutDirection) const
+{
+	OutDirection = FVector::ZeroVector;
+
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+
+	if (!PC)
+	{
+		return false;
+	}
+
+	FVector WorldOrigin;
+	FVector WorldDirection;
+
+	if (!PC->DeprojectMousePositionToWorld(WorldOrigin, WorldDirection))
+	{
+		return false;
+	}
+
+	const FVector TraceEnd = WorldOrigin + WorldDirection * AimTraceDistance;
+
+	const FPlane GroundPlane(GetActorLocation(), FVector::UpVector);
+	const FVector HitPoint = FMath::LinePlaneIntersection(WorldOrigin, TraceEnd, GroundPlane);
+
+	FVector Direction = HitPoint - GetActorLocation();
 	Direction.Z = 0.0f;
 
 	if (Direction.IsNearlyZero())
 	{
+		return false;
+	}
+
+	Direction.Normalize();
+	OutDirection = Direction;
+
+	return true;
+}
+
+void AProject_GemCoopCharacter::UpdateAimToMouse()
+{
+	FVector AimDirection;
+
+	if (!GetMouseAimDirection(AimDirection))
+	{
 		return;
 	}
 
-	FRotator TargetRotation = Direction.Rotation();
-	SetActorRotation(FRotator(0.0f, TargetRotation.Yaw, 0.0f));
+	const float NewYaw = AimDirection.Rotation().Yaw;
+
+	RequestSetAimYaw(NewYaw);
 }
 
 bool AProject_GemCoopCharacter::GetMouseWorldLocation(FVector& OutWorldLocation) const
@@ -778,26 +928,17 @@ void AProject_GemCoopCharacter::OnDashInputEnd()
 
 void AProject_GemCoopCharacter::OnGemQ()
 {
-	if (GemCompRef)
-	{
-		GemCompRef->UseGem(0);
-	}
+	RequestUseGemSlot(0);
 }
 
 void AProject_GemCoopCharacter::OnGemW()
 {
-	if (GemCompRef)
-	{
-		GemCompRef->UseGem(1);
-	}
+	RequestUseGemSlot(1);
 }
 
 void AProject_GemCoopCharacter::OnGemE()
 {
-	if (GemCompRef)
-	{
-		GemCompRef->UseGem(2);
-	}
+	RequestUseGemSlot(2);
 }
 
 void AProject_GemCoopCharacter::OnFusionInput()
@@ -876,4 +1017,52 @@ void AProject_GemCoopCharacter::UpdateWalkSpeedByState()
 	}
 
 	GetCharacterMovement()->MaxWalkSpeed = BaseSpeed;
+}
+
+bool AProject_GemCoopCharacter::RequestUseGemSlot(int32 SlotIndex)
+{
+	if (!GemCompRef)
+	{
+		GemCompRef = FindComponentByClass<UProject_GemCoopGemComponent>();
+	}
+
+	if (!GemCompRef)
+	{
+		return false;
+	}
+
+	if (HasAuthority())
+	{
+		return UseGemSlot_ServerOnly(SlotIndex);
+	}
+
+	ServerRequestUseGemSlot(SlotIndex);
+	return true;
+}
+
+void AProject_GemCoopCharacter::ServerRequestUseGemSlot_Implementation(int32 SlotIndex)
+{
+	UseGemSlot_ServerOnly(SlotIndex);
+}
+
+bool AProject_GemCoopCharacter::UseGemSlot_ServerOnly(int32 SlotIndex)
+{
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
+	if (!GemCompRef)
+	{
+		GemCompRef = FindComponentByClass<UProject_GemCoopGemComponent>();
+	}
+
+	if (!GemCompRef)
+	{
+		return false;
+	}
+
+	const bool bResult = GemCompRef->UseGem(SlotIndex);
+
+	return bResult;
 }

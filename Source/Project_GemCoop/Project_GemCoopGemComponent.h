@@ -89,6 +89,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Gem|State")
 	EGemType LastUsedGemType = EGemType::None;
 
+	UPROPERTY(ReplicatedUsing = OnRep_CooldownEndTimes, VisibleAnywhere, BlueprintReadOnly, Category = "Gem|Cooldown")
+	TArray<float> SlotCooldownEndTimes;
+
 	UPROPERTY()
 	UProject_GemCoopCombatComponent* CombatComp = nullptr;
 
@@ -160,13 +163,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Gem")
 	void RefillDefaultGemsFallback();
 
-private:
-	void ApplyGemEffect(int32 SlotIndex);
+	UFUNCTION(BlueprintPure, Category = "Gem|Cooldown")
+	float GetSlotCooldownRemaining(int32 SlotIndex) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gem|Cooldown")
+	float GetSlotCooldownPercent(int32 SlotIndex) const;
+
+	UFUNCTION(BlueprintPure, Category = "Gem|Cooldown")
+	float GetSlotCooldownFillPercent(int32 SlotIndex) const;
+
+	UFUNCTION()
+	void OnRep_CooldownEndTimes();
+
+	float GetServerTimeSeconds() const;
+	float GetGemCooldownBySlot(int32 SlotIndex) const;
+
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+protected:
 	void ApplyFusionEffect(const FFusionResult& Result);
 	void StartCooldown(int32 SlotIndex);
 
 	AActor* FindTargetInFront() const;
 	void ApplyDamageToTarget(AActor* Target, float Damage, EGemType DamageType);
+
+	bool UseGem_Internal(int32 SlotIndex);
+	void ApplyGemEffect(int32 SlotIndex);
 
 protected:
 	// Called when the game starts

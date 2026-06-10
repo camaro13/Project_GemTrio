@@ -22,6 +22,8 @@ public:
 	// Sets default values for this component's properties
 	UProject_GemCoopEnergySYComponent();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UPROPERTY(BlueprintAssignable)
 	FOnEnergyChanged OnEnergyChanged;
 
@@ -31,31 +33,31 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnUltGaugeChanged OnUltGaugeChanged;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
-	float CachedSharedEnergy = 0.0f;
+	UPROPERTY(ReplicatedUsing = OnRep_Energy, VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
+	float CachedEnergy = 100.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Energy, VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
+	float CachedMaxEnergy = 100.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
-	float CachedMaxSharedEnergy = 100.f;
+	float EnergyRegenMultiplier = 1.f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
-	float EnergyRegenMultiplier = 1.0f;
+	float SafeZoneRegenBonus = 2.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
-	float SafeZoneRegenBonus = 2.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Energy")
 	bool bInSafeZone = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
+	UPROPERTY(ReplicatedUsing = OnRep_UltGauge, VisibleAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
 	float UltGaugeContribution = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
-	float UltGaugeChargeRate = 5.0f;
+	float UltGaugeChargeRate = 5.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ultimate")
 	float MaxUltGauge = 100.0f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
+	UPROPERTY(ReplicatedUsing = OnRep_UltGauge, VisibleAnywhere, BlueprintReadOnly, Category = "Energy|Ult")
 	bool bUltimateReady = false;
 
 	UPROPERTY()
@@ -69,7 +71,7 @@ public:
 	bool HasEnoughEnergy(float Amount) const;
 
 	UFUNCTION(BlueprintCallable, Category = "Energy")
-	void SyncWithGameState();
+	void SyncWithUI();
 
 	UFUNCTION(BlueprintCallable, Category = "Energy")
 	void OnGameStateEnergyChanged(float CurrentEnergy, float MaxEnergy);
@@ -93,6 +95,9 @@ public:
 	float GetCurrentEnergy() const;
 
 	UFUNCTION(BlueprintPure, Category = "Energy")
+	float GetMaxEnergy() const;
+
+	UFUNCTION(BlueprintPure, Category = "Energy")
 	float GetEnergyPercent() const;
 
 	/*UFUNCTION(Server, Reliable)
@@ -101,6 +106,14 @@ public:
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
+
+	UFUNCTION()
+	void OnRep_Energy();
+
+	UFUNCTION()
+	void OnRep_UltGauge();
+
+	void SetEnergy_Server(float NewEnergy);
 
 public:	
 	// Called every frame

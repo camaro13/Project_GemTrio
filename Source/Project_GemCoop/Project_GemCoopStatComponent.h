@@ -43,11 +43,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats|Base")
 	float RegenRate = 0.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats|Current")
+	UPROPERTY(ReplicatedUsing = OnRep_HP, VisibleAnywhere, BlueprintReadOnly, Category = "Stats|Current")
     float CurrentHP = 100.f;
 
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats|Final")
+    UPROPERTY(ReplicatedUsing = OnRep_HP, VisibleAnywhere, BlueprintReadOnly, Category = "Stats|Final")
     float FinalHP = 100.f;
+
+    UPROPERTY(ReplicatedUsing = OnRep_DeathState, VisibleAnywhere, BlueprintReadOnly, Category = "Stats|State")
+    bool bIsDead = false;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats|Final")
     float FinalATK = 20.f;
@@ -101,6 +104,17 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Stats")
     void SetModifier(const FStatModifier& NewModifier);
 
+    UFUNCTION()
+    void OnRep_HP();
+
+    UFUNCTION()
+    void OnRep_DeathState();
+
+    UFUNCTION(BlueprintCallable, Category = "Stats")
+    void AddTemporaryMaxHP(float Amount, bool bAlsoHeal);
+
+    virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;
@@ -111,5 +125,4 @@ public:
 
 private:
     void HandleDeath();
-    bool bIsDead = false;
 };

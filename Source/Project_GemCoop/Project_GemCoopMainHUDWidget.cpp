@@ -76,14 +76,28 @@ void UProject_GemCoopMainHUDWidget::UpdateHP()
 
 void UProject_GemCoopMainHUDWidget::UpdateEnergy()
 {
-	if (!GameStateRef)
+	APlayerController* PC = GetOwningPlayer();
+
+	if (!PC)
 	{
 		return;
 	}
 
-	float CurrentEnergy = GameStateRef->SharedEnergy;
-	float MaxEnergy = GameStateRef->MaxSharedEnergy;
-	float EnergyPercent = MaxEnergy > 0.0f ? CurrentEnergy / MaxEnergy : 0.0f;
+	AProject_GemCoopCharacter* Character = Cast<AProject_GemCoopCharacter>(PC->GetPawn());
+
+	if (!Character)
+	{
+		return;
+	}
+
+	EnergyComp = Character->FindComponentByClass<UProject_GemCoopEnergySYComponent>();
+
+	if (!EnergyComp)
+	{
+		return;
+	}
+
+	const float EnergyPercent = EnergyComp->GetEnergyPercent();
 
 	if (PB_Energy)
 	{
@@ -92,18 +106,34 @@ void UProject_GemCoopMainHUDWidget::UpdateEnergy()
 
 	if (TXT_Energy)
 	{
-		TXT_Energy->SetText(FText::FromString(FString::Printf(TEXT("Energy %.0f / %.0f"), CurrentEnergy, MaxEnergy)));
+		TXT_Energy->SetText(FText::FromString(FString::Printf(TEXT("Energy %.0f / %.0f"), EnergyComp->CachedEnergy, EnergyComp->CachedMaxEnergy)));
 	}
 }
 
 void UProject_GemCoopMainHUDWidget::UpdateUltimate()
 {
+	APlayerController* PC = GetOwningPlayer();
+
+	if (!PC)
+	{
+		return;
+	}
+
+	AProject_GemCoopCharacter* Character = Cast<AProject_GemCoopCharacter>(PC->GetPawn());
+
+	if (!Character)
+	{
+		return;
+	}
+
+	EnergyComp = Character->FindComponentByClass<UProject_GemCoopEnergySYComponent>();
+
 	if (!EnergyComp)
 	{
 		return;
 	}
 
-	float UltPercent = EnergyComp->GetUltGaugePercent();
+	const float UltPercent = EnergyComp->GetUltGaugePercent();
 
 	if (PB_Ult)
 	{
@@ -172,23 +202,10 @@ float UProject_GemCoopMainHUDWidget::GetGemCooldownPercent(int32 SlotIndex) cons
 {
 	if (!GemComp)
 	{
-		return 0.0f;
+		return 1.f;
 	}
 
-	if (!GemComp->GemSlots.IsValidIndex(SlotIndex) || !GemComp->SlotCooldowns.IsValidIndex(SlotIndex))
-	{
-		return 0.0f;
-	}
-
-	float Cooldown = GemComp->GemSlots[SlotIndex].Cooldown;
-	float Remaining = GemComp->SlotCooldowns[SlotIndex];
-
-	if (Cooldown <= 0.0f)
-	{
-		return 0.0f;
-	}
-
-	return FMath::Clamp(Remaining / Cooldown, 0.0f, 1.0f);
+	return GemComp->GetSlotCooldownFillPercent(SlotIndex);
 }
 
 FText UProject_GemCoopMainHUDWidget::GetGemDisplayText(int32 SlotIndex) const
@@ -198,14 +215,14 @@ FText UProject_GemCoopMainHUDWidget::GetGemDisplayText(int32 SlotIndex) const
 		return FText::FromString(TEXT("-"));
 	}
 
-	FGemData& Gem = GemComp->GemSlots[SlotIndex];
+	const FGemData& Gem = GemComp->GemSlots[SlotIndex];
 
 	if (Gem.GemType == EGemType::None)
 	{
 		return FText::FromString(TEXT("Empty"));
 	}
 
-	float Remaining = GemComp->SlotCooldowns.IsValidIndex(SlotIndex) ? GemComp->SlotCooldowns[SlotIndex] : 0.0f;
+	const float Remaining = GemComp->GetSlotCooldownRemaining(SlotIndex);
 
 	if (Remaining > 0.0f)
 	{
