@@ -24,6 +24,8 @@ public:
 	// Sets default values for this character's properties
 	AProject_GemCoopMonsterCharacter();
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UPROPERTY(BlueprintAssignable)
 	FOnMonsterDied OnMonsterDied;
 
@@ -78,6 +80,49 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	TArray<UProject_GemCoopMonsterAbility*> Abilities;
 
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentTarget, VisibleAnywhere, BlueprintReadOnly, Category = "Monster|AI")
+	AActor* CurrentTarget = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|AI")
+	float RetargetInterval = 5.0f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|AI")
+	float RetargetRandomDeviation = 0.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|AI")
+	float TargetSwitchChance = 0.45f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|AI")
+	float MoveRefreshInterval = 0.25f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackStartRange = 180.0f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackDuration = 0.8f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackCooldown = 1.5f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackDamageTime = 0.35f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackHitRadius = 180.0f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackForwardOffset = 90.0f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	float AttackHalfAngle = 90.0f;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|Combat")
+	bool bUseAttackConeCheck = true;//
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|AI")
+	FName TargetBlackboardKeyName = TEXT("TargetActor");//
+
+public:
 	UFUNCTION(BlueprintCallable)
 	void InitializeFromData(FMonsterData& Data);
 
@@ -102,15 +147,51 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void TickAbilities(float DeltaTime);
 
-	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+	UFUNCTION(BlueprintCallable, Category = "Monster|Combat")
+	void AnimNotify_AttackHit();
 
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
 	void OnDeath();
 
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+
+	UFUNCTION()
+	void OnRep_CurrentTarget();
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlayAttackMontage();
+
+private:
+	void ServerUpdateTargeting(float DeltaTime);
+	void ServerUpdateMovement(float DeltaTime);
+	void ServerUpdateAttack(float DeltaTime);
+	void ServerUpdateAttackState(float DeltaTime);
+
+	AActor* SelectNearestPlayerTarget() const;
+	bool IsValidPlayerTarget(AActor* Target) const;
+
+	void SetCurrentTarget_Server(AActor* NewTarget);
+	void UpdateBlackboardTarget();
+
+	void StartAttack_ServerOnly();
+	void ApplyAttackAreaDamage_ServerOnly();
+	void FinishAttack_ServerOnly();
+
+	void MoveToCurrentTarget_Server(bool bForceMove);
+
+	float RetargetTimer = 0.0f;
+	float MoveRefreshTimer = 0.0f;
+	float AttackCooldownTimer = 0.0f;
+
+	bool bIsAttacking = false;
+	bool bAttackDamageApplied = false;
+	float AttackElapsedTime = 0.0f;
+
+	FTimerHandle AttackHitTimerHandle;
+	FTimerHandle AttackEndTimerHandle;
 
 public:	
 	// Called every frame
