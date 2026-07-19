@@ -36,13 +36,10 @@ void AProject_GemCoopWaveManager::BeginPlay()
 	
 	ResetRuntimeWaveState();
 
-	if (bDebugLog)
+	if (!HasAuthority())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WaveManager BeginPlay. AutoStart=%d, DefaultMonsterClass=%s, SpawnPoints=%d"),
-			bAutoStartWave,
-			*GetNameSafe(DefaultMonsterClass),
-			SpawnPoints.Num()
-		);
+		SetActorTickEnabled(false);
+		return;
 	}
 
 	if (bAutoStartWave)
@@ -140,6 +137,11 @@ void AProject_GemCoopWaveManager::StartNextWave()
 
 void AProject_GemCoopWaveManager::StartWave(int32 WaveNumber)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	if (bDebugLog)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("StartWave Called. Wave=%d, bWaveInProgress=%d, Hardcoded=%d"),
