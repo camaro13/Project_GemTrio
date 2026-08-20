@@ -128,6 +128,11 @@ FName AProject_GemCoopWaveManager::GetMonsterRowName(EMonsterType MonsterType) c
 
 void AProject_GemCoopWaveManager::StartNextWave()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	if (bDebugLog)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("StartNextWave Called. CurrentWave=%d"), CurrentWave);
@@ -232,6 +237,16 @@ void AProject_GemCoopWaveManager::StartWave(int32 WaveNumber)
 
 void AProject_GemCoopWaveManager::SpawnMonsterBatch(FWaveSpawnEntry Entry)
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (!bWaveInProgress)
+	{
+		return;
+	}
+
 	if (GetWorldTimerManager().IsTimerActive(SpawnTimerHandle))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("SpawnMonsterBatch blocked. Spawn timer already active."));
@@ -261,6 +276,11 @@ void AProject_GemCoopWaveManager::SpawnMonsterBatch(FWaveSpawnEntry Entry)
 	if (!Entry.MonsterClass)
 	{
 		UE_LOG(LogTemp, Error, TEXT("WaveManager: MonsterClass is null. Set DefaultMonsterClass in BP_WaveManager."));
+
+		bWaveInProgress = false;
+		PendingSpawnCount = 0;
+		PendingSpawnedCount = 0;
+
 		return;
 	}
 
@@ -276,13 +296,25 @@ void AProject_GemCoopWaveManager::SpawnMonsterBatch(FWaveSpawnEntry Entry)
 		);
 	}
 
-	float Interval = Entry.SpawnInterval > 0.0f ? Entry.SpawnInterval : DefaultSpawnInterval;
+	const float Interval = Entry.SpawnInterval > 0.0f ? Entry.SpawnInterval : DefaultSpawnInterval;
 
 	GetWorldTimerManager().SetTimer(SpawnTimerHandle, this, &AProject_GemCoopWaveManager::SpawnSingleMonsterFromPending, Interval, true, 0.0f);
 }
 
 void AProject_GemCoopWaveManager::SpawnSingleMonsterFromPending()
 {
+	if (!HasAuthority())
+	{
+		GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+		return;
+	}
+
+	if (!bWaveInProgress)
+	{
+		GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+		return;
+	}
+
 	if (PendingSpawnedCount >= PendingSpawnCount)
 	{
 		GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
@@ -325,6 +357,7 @@ void AProject_GemCoopWaveManager::SpawnSingleMonsterFromPending()
 	if (!Monster)
 	{
 		UE_LOG(LogTemp, Error, TEXT("WaveManager: SpawnActor returned nullptr."));
+		PendingSpawnedCount++;
 		return;
 	}
 
@@ -346,7 +379,7 @@ void AProject_GemCoopWaveManager::SpawnSingleMonsterFromPending()
 	MonsterData.BaseATK = GetScaledATK(MonsterData.BaseATK, CurrentWave);
 
 	Monster->InitializeFromData(MonsterData);
-	Monster->OnMonsterDied.AddDynamic(this, &AProject_GemCoopWaveManager::OnMonsterDeath);
+	Monster->OnMonsterDied.AddUniqueDynamic(this, &AProject_GemCoopWaveManager::OnMonsterDeath);
 
 	SpawnedMonsters.Add(Monster);
 	PendingSpawnedCount++;
@@ -363,12 +396,24 @@ void AProject_GemCoopWaveManager::SpawnSingleMonsterFromPending()
 
 void AProject_GemCoopWaveManager::OnMonsterDeath(AProject_GemCoopMonsterCharacter* Monster)
 {
-	if (!Monster)
+	if (!HasAuthority())
 	{
 		return;
 	}
 
-	SpawnedMonsters.Remove(Monster);
+	if (!IsValid(Monster))
+	{
+		return;
+	}
+
+	const int32 RemovedCount = SpawnedMonsters.RemoveSingleSwap(Monster);
+
+	if (RemovedCount <= 0)
+	{
+		return;
+	}
+
+	Monster->OnMonsterDied.RemoveDynamic(this, &AProject_GemCoopWaveManager::OnMonsterDeath);
 
 	TrySpawnGemDrop(Monster);
 
@@ -382,6 +427,11 @@ void AProject_GemCoopWaveManager::OnMonsterDeath(AProject_GemCoopMonsterCharacte
 
 bool AProject_GemCoopWaveManager::IsWaveCleared() const
 {
+	if (!HasAuthority())
+	{
+		return false;
+	}
+
 	if (!bWaveInProgress)
 	{
 		return false;
@@ -394,7 +444,7 @@ bool AProject_GemCoopWaveManager::IsWaveCleared() const
 
 	for (AProject_GemCoopMonsterCharacter* Monster : SpawnedMonsters)
 	{
-		if (Monster && !Monster->bIsDead)
+		if (IsValid(Monster) && !Monster->bIsDead)
 		{
 			return false;
 		}
@@ -405,6 +455,11 @@ bool AProject_GemCoopWaveManager::IsWaveCleared() const
 
 void AProject_GemCoopWaveManager::OnWaveClearedInternal()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	if (!bWaveInProgress)
 	{
 		return;
@@ -414,10 +469,7 @@ void AProject_GemCoopWaveManager::OnWaveClearedInternal()
 
 	GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
 
-	if (bDebugLog)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Wave Cleared: %d"), CurrentWave);
-	}
+	SpawnedMonsters.RemoveAll([](AProject_GemCoopMonsterCharacter* Monster) {return !IsValid(Monster) || Monster->bIsDead; });
 
 	OnWaveCleared.Broadcast(CurrentWave);
 
@@ -450,21 +502,38 @@ FGemData AProject_GemCoopWaveManager::MakeFallbackDropGem() const
 
 void AProject_GemCoopWaveManager::ClearAllMonsters()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+	GetWorldTimerManager().ClearTimer(NextWaveTimerHandle);
+
 	for (AProject_GemCoopMonsterCharacter* Monster : SpawnedMonsters)
 	{
 		if (IsValid(Monster))
 		{
+			Monster->OnMonsterDied.RemoveDynamic(this, &AProject_GemCoopWaveManager::OnMonsterDeath);
+
 			Monster->Destroy();
 		}
 	}
 
 	SpawnedMonsters.Empty();
-	GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
+	
+	PendingSpawnCount = 0;
+	PendingSpawnedCount = 0;
 }
 
 void AProject_GemCoopWaveManager::TrySpawnGemDrop(AProject_GemCoopMonsterCharacter* Monster)
 {
-	if (!bDropGemOnMonsterDeath || !Monster)
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (!bDropGemOnMonsterDeath || !IsValid(Monster))
 	{
 		return;
 	}
@@ -577,6 +646,11 @@ int32 AProject_GemCoopWaveManager::GetScaledCount(int32 BaseCount, int32 Wave) c
 
 void AProject_GemCoopWaveManager::CompleteGameAndReturnToLobby()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+
 	GetWorldTimerManager().ClearTimer(SpawnTimerHandle);
 	GetWorldTimerManager().ClearTimer(NextWaveTimerHandle);
 

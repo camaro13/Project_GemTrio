@@ -14,6 +14,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPhaseChanged, int32, NewPhase);
 
 class UProject_GemCoopMonsterAbility;
 class AProject_GemCoopCharacter;
+class UWidgetComponent;
+class UProject_GemCoopMonsterHPWidget;
+class UAnimMontage;
 
 UCLASS()
 class PROJECT_GEMCOOP_API AProject_GemCoopMonsterCharacter : public ACharacter
@@ -35,10 +38,10 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FOnPhaseChanged OnPhaseChanged;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category="Monster")
+	UPROPERTY(ReplicatedUsing = OnRep_Health, EditAnywhere, BlueprintReadWrite, Category="Monster")
 	float MaxHP = 100.f;
 
-	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
+	UPROPERTY(ReplicatedUsing = OnRep_Health, VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
 	float CurrentHP = 100.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Monster")
@@ -59,7 +62,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	EGemType WeaknessGemType = EGemType::None;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Monster")
+	UPROPERTY(ReplicatedUsing = OnRep_IsDead, EditAnywhere, BlueprintReadWrite, Category = "Monster")
 	bool bIsDead = false;
 
 	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = "Monster")
@@ -79,6 +82,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability")
 	TArray<UProject_GemCoopMonsterAbility*> Abilities;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Monster|UI")
+	UWidgetComponent* HealthBarWidgetComponent = nullptr;
 
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentTarget, VisibleAnywhere, BlueprintReadOnly, Category = "Monster|AI")
 	AActor* CurrentTarget = nullptr;
@@ -122,6 +128,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Monster|AI")
 	FName TargetBlackboardKeyName = TEXT("TargetActor");//
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Death")
+	UAnimMontage* DeathMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster|Death", meta = (ClampMin = "0.1"))
+	float DeathDestroyDelay = 2.0f;
+
 public:
 	UFUNCTION(BlueprintCallable)
 	void InitializeFromData(FMonsterData& Data);
@@ -163,6 +175,22 @@ protected:
 
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlayAttackMontage();
+
+	UFUNCTION()
+	void OnRep_Health();
+
+	UFUNCTION()
+	void OnRep_IsDead();
+
+	void ApplyDeathState();
+
+	void InitializeHealthBarWidget();
+	void RefreshHealthBar();
+
+	void UpdateHealthBarFacingCamera();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Monster")
+	FRotator HealthBarFacingRotationOffset = FRotator(0.0f, 0.0f, 0.0f);
 
 private:
 	void ServerUpdateTargeting(float DeltaTime);

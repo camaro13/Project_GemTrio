@@ -23,6 +23,16 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	UFUNCTION()
+	void OnRep_GemData();
+
+	void RefreshGemVisual();
+
+	UPROPERTY(ReplicatedUsing = OnRep_GemData, VisibleAnywhere, BlueprintReadOnly, Category = "GemDrop")
+	FGemData GemData;
+
+	UPROPERTY(ReplicatedUsing = OnRep_GemData, VisibleAnywhere, BlueprintReadOnly, Category = "GemDrop")
+	int32 Quantity = 1;
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -52,8 +62,10 @@ public:
 	bool bPickedUp = false;
 
 public:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 	UFUNCTION(BlueprintCallable, Category = "GemDrop")
-	void SetGemData(const FGemData& NewGemData, int32 NewAmount = 1);
+	void SetGemData(const FGemData& InGemData, int32 InQuantity);
 
 	UFUNCTION(BlueprintPure, Category = "GemDrop")
 	FGemData GetGemData() const;

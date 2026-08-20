@@ -16,6 +16,10 @@
 #include "DrawDebugHelpers.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Project_GemCoopMonsterHPWidget.h"
+#include "Components/WidgetComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Navigation/PathFollowingComponent.h"
@@ -56,6 +60,16 @@ AProject_GemCoopMonsterCharacter::AProject_GemCoopMonsterCharacter()
 	{
 		GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
 	}
+
+	HealthBarWidgetComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBarWidgetComponent"));
+	HealthBarWidgetComponent->SetupAttachment(GetRootComponent());
+	HealthBarWidgetComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 120.f));
+	HealthBarWidgetComponent->SetWidgetSpace(EWidgetSpace::World);
+	HealthBarWidgetComponent->SetDrawAtDesiredSize(true);
+	HealthBarWidgetComponent->SetPivot(FVector2D(0.5f, 0.5f));
+	HealthBarWidgetComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HealthBarWidgetComponent->SetTickMode(ETickMode::Enabled);
+	HealthBarWidgetComponent->SetAbsolute(false, true, false);
 }
 
 void AProject_GemCoopMonsterCharacter::BeginPlay()
@@ -109,18 +123,23 @@ void AProject_GemCoopMonsterCharacter::BeginPlay()
 		SetCurrentTarget_Server(SelectNearestPlayerTarget());
 	}
 
-	for (UProject_GemCoopMonsterAbility* Ability : Abilities)
+	/*for (UProject_GemCoopMonsterAbility* Ability : Abilities)
 	{
 		if (Ability)
 		{
 			Ability->OwnerMonster = this;
 		}
-	}
+	}*/
+
+	InitializeHealthBarWidget();
+	RefreshHealthBar();
 }
 
 void AProject_GemCoopMonsterCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
+	UpdateHealthBarFacingCamera();
 
 	if (!HasAuthority())
 	{
@@ -174,13 +193,39 @@ void AProject_GemCoopMonsterCharacter::InitializeFromData(FMonsterData& Data)
 	bIsDead = false;
 	CurrentPhase = 1;
 
-	if (GetCharacterMovement())
+	bIsAttacking = false;
+	bAttackDamageApplied = false;
+	AttackElapsedTime = 0.0f;
+	AttackCooldownTimer = 0.0f;
+
+	if (UCharacterMovementComponent* MovementComp = GetCharacterMovement())
 	{
-		GetCharacterMovement()->MaxWalkSpeed = MoveSpeed;
+		MovementComp->SetMovementMode(MOVE_Walking);
+		MovementComp->MaxWalkSpeed = MoveSpeed;
 	}
+
+	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
+	{
+		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	}
+
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	}
+
+	if (HealthBarWidgetComponent)
+	{
+		HealthBarWidgetComponent->SetHiddenInGame(false, true);
+		HealthBarWidgetComponent->SetVisibility(true, true);
+	}
+
+	RefreshHealthBar();
 
 	if (HasAuthority())
 	{
+		ForceNetUpdate();
+
 		if (!GetController())
 		{
 			SpawnDefaultController();
@@ -283,6 +328,9 @@ float AProject_GemCoopMonsterCharacter::TakeDamage(float DamageAmount, FDamageEv
 
 	CurrentHP = FMath::Clamp(CurrentHP - FinalDamage, 0.0f, MaxHP);
 
+	RefreshHealthBar();
+	ForceNetUpdate();
+
 	OnMonsterHit.Broadcast(FinalDamage, bIsWeak);
 
 	TryPhaseTransition();
@@ -355,6 +403,11 @@ void AProject_GemCoopMonsterCharacter::DebugApplyMonsterDamage(float DamageAmoun
 
 void AProject_GemCoopMonsterCharacter::OnDeath()
 {
+	if (!HasAuthority())
+	{
+		return;
+	}
+	
 	if (bIsDead)
 	{
 		return;
@@ -362,17 +415,26 @@ void AProject_GemCoopMonsterCharacter::OnDeath()
 
 	bIsDead = true;
 	CurrentHP = 0.0f;
+	CurrentTarget = nullptr;
 
-	if (GetCharacterMovement())
+	bIsAttacking = false;
+	bAttackDamageApplied = false;
+	AttackElapsedTime = 0.0f;
+	AttackCooldownTimer = 0.0f;
+
+	if (AAIController* AIC = Cast<AAIController>(GetController()))
 	{
-		GetCharacterMovement()->DisableMovement();
+		AIC->StopMovement();
+		AIC->ClearFocus(EAIFocusPriority::Gameplay);
 	}
 
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ApplyDeathState();
 
 	OnMonsterDied.Broadcast(this);
 
-	SetLifeSpan(1.0f);
+	ForceNetUpdate();
+
+	SetLifeSpan(DeathDestroyDelay);
 }
 
 // Called to bind functionality to input
@@ -537,6 +599,179 @@ void AProject_GemCoopMonsterCharacter::SetCurrentTarget_Server(AActor* NewTarget
 void AProject_GemCoopMonsterCharacter::OnRep_CurrentTarget()
 {
 
+}
+
+void AProject_GemCoopMonsterCharacter::OnRep_Health()
+{
+	RefreshHealthBar();
+	
+	UE_LOG(
+		LogTemp,
+		Verbose,
+		TEXT("Monster OnRep_Health. Monster=%s HP=%.1f / %.1f"),
+		*GetNameSafe(this),
+		CurrentHP,
+		MaxHP
+	);
+}
+
+void AProject_GemCoopMonsterCharacter::OnRep_IsDead()
+{
+	if (bIsDead)
+	{
+		ApplyDeathState();
+	}
+}
+
+void AProject_GemCoopMonsterCharacter::ApplyDeathState()
+{
+	if (HealthBarWidgetComponent)
+	{
+		HealthBarWidgetComponent->SetVisibility(false, true);
+		HealthBarWidgetComponent->SetHiddenInGame(true, true);
+	}
+
+	if (UCharacterMovementComponent* MovementComp = GetCharacterMovement())
+	{
+		MovementComp->StopMovementImmediately();
+		MovementComp->DisableMovement();
+	}
+
+	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
+	{
+		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	if (GetNetMode() != NM_DedicatedServer && DeathMontage)
+	{
+		PlayAnimMontage(DeathMontage);
+	}
+}
+
+void AProject_GemCoopMonsterCharacter::InitializeHealthBarWidget()
+{
+	if (!HealthBarWidgetComponent)
+	{
+		return;
+	}
+
+	HealthBarWidgetComponent->InitWidget();
+
+	UProject_GemCoopMonsterHPWidget* HealthBarWidget = Cast<UProject_GemCoopMonsterHPWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+
+	if (!HealthBarWidget)
+	{
+		UE_LOG(
+			LogTemp,
+			Warning,
+			TEXT("Monster HealthBar widget missing or wrong class. Monster=%s"),
+			*GetNameSafe(this)
+		);
+
+		return;
+	}
+
+	HealthBarWidget->SetOwningMonster(this);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("Monster HealthBar widget Good. Monster=%s"),
+		*GetNameSafe(this)
+	);
+}
+
+void AProject_GemCoopMonsterCharacter::RefreshHealthBar()
+{
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("Monster HealthBar widget Refresh Good. Monster=%s"),
+		*GetNameSafe(this)
+	);
+
+	if (!HealthBarWidgetComponent)
+	{
+		return;
+	}
+
+	UProject_GemCoopMonsterHPWidget* HealthBarWidget = Cast<UProject_GemCoopMonsterHPWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+
+	if (!HealthBarWidget)
+	{
+		InitializeHealthBarWidget();
+
+		HealthBarWidget = Cast<UProject_GemCoopMonsterHPWidget>(HealthBarWidgetComponent->GetUserWidgetObject());
+	}
+
+	if (!HealthBarWidget)
+	{
+		return;
+	}
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("Monster HealthBar widgetUPdateHealth Good. Monster=%s"),
+		*GetNameSafe(this)
+	);
+
+	HealthBarWidget->UpdateHealth(CurrentHP, MaxHP);
+
+	const bool bShouldShow = !bIsDead && CurrentHP > 0.0f && !IsHidden();
+
+	HealthBarWidgetComponent->SetVisibility(bShouldShow, true);
+
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("Monster HealthBar widget visibility Good. Visibility=%d"),
+		bShouldShow
+	);
+}
+
+void AProject_GemCoopMonsterCharacter::UpdateHealthBarFacingCamera()
+{
+	if (!HealthBarWidgetComponent)
+	{
+		return;
+	}
+
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+
+	APlayerCameraManager* LocalCameraManager = UGameplayStatics::GetPlayerCameraManager(this, 0);
+
+	if (!LocalCameraManager)
+	{
+		return;
+	}
+
+	const FVector WidgetLocation = HealthBarWidgetComponent->GetComponentLocation();
+
+	const FVector CameraLocation = LocalCameraManager->GetCameraLocation();
+
+	const FVector DirectionToCamera = CameraLocation - WidgetLocation;
+
+	if (DirectionToCamera.IsNearlyZero())
+	{
+		return;
+	}
+
+	FRotator TargetRotation = DirectionToCamera.Rotation();
+
+	TargetRotation.Roll = 0.0f;
+
+	TargetRotation += HealthBarFacingRotationOffset;
+
+	HealthBarWidgetComponent->SetWorldRotation(TargetRotation);
 }
 
 void AProject_GemCoopMonsterCharacter::UpdateBlackboardTarget()

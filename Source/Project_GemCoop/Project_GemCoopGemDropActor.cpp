@@ -5,6 +5,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Project_GemCoopCharacter.h"
+#include "Net/UnrealNetwork.h"
 #include "Project_GemCoopGameInstance.h"
 
 // Sets default values
@@ -12,6 +13,12 @@ AProject_GemCoopGemDropActor::AProject_GemCoopGemDropActor()
 {
  	// Set this actor to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
+
+	bReplicates = true;
+	SetReplicateMovement(true);
+
+	NetUpdateFrequency = 20.f;
+	MinNetUpdateFrequency = 5.f;
 
 	CollisionComp = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionComp"));
 	SetRootComponent(CollisionComp);
@@ -21,6 +28,7 @@ AProject_GemCoopGemDropActor::AProject_GemCoopGemDropActor()
 	CollisionComp->SetCollisionObjectType(ECC_WorldDynamic);
 	CollisionComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 	CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	CollisionComp->SetGenerateOverlapEvents(true);
 
 	MeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
 	MeshComp->SetupAttachment(CollisionComp);
@@ -38,6 +46,8 @@ void AProject_GemCoopGemDropActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
+	RefreshGemVisual();
+
 	if (CollisionComp)
 	{
 		CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &AProject_GemCoopGemDropActor::OnDropOverlap);
@@ -54,6 +64,43 @@ void AProject_GemCoopGemDropActor::BeginPlay()
 	}
 }
 
+void AProject_GemCoopGemDropActor::OnRep_GemData()
+{
+	RefreshGemVisual();
+}
+
+void AProject_GemCoopGemDropActor::RefreshGemVisual()
+{
+	if (!MeshComp)
+	{
+		return;
+	}
+
+	MeshComp->SetVisibility(true, true);
+	MeshComp->SetHiddenInGame(false, true);
+
+	switch (GemData.GemType)
+	{
+	case EGemType::Ruby:
+		break;
+
+	case EGemType::Sapphire:
+		break;
+
+	case EGemType::Topaz:
+		break;
+
+	case EGemType::Emerald:
+		break;
+
+	case EGemType::Amethyst:
+		break;
+
+	default:
+		break;
+	}
+}
+
 // Called every frame
 void AProject_GemCoopGemDropActor::Tick(float DeltaTime)
 {
@@ -62,18 +109,26 @@ void AProject_GemCoopGemDropActor::Tick(float DeltaTime)
 	AddActorWorldRotation(FRotator(0.0f, RotateSpeed * DeltaTime, 0.0f));
 }
 
-void AProject_GemCoopGemDropActor::SetGemData(const FGemData& NewGemData, int32 NewAmount)
+void AProject_GemCoopGemDropActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	DropGemData = NewGemData;
-	DropAmount = FMath::Max(1, NewAmount);
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	if (bDebugLog)
+	DOREPLIFETIME(AProject_GemCoopGemDropActor, GemData);
+	DOREPLIFETIME(AProject_GemCoopGemDropActor, Quantity);
+}
+
+void AProject_GemCoopGemDropActor::SetGemData(const FGemData& InGemData, int32 InQuantity)
+{
+	if (!HasAuthority())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("GemDrop SetGemData. GemID=%s Amount=%d"),
-			*DropGemData.GemID.ToString(),
-			DropAmount
-		);
+		return;
 	}
+
+	GemData = InGemData;
+	Quantity = FMath::Max(1, InQuantity);
+
+	RefreshGemVisual();
+	ForceNetUpdate();
 }
 
 FGemData AProject_GemCoopGemDropActor::GetGemData() const
@@ -89,6 +144,11 @@ void AProject_GemCoopGemDropActor::OnDropOverlap(UPrimitiveComponent* Overlapped
 	}
 
 	if (!OtherActor || OtherActor == this)
+	{
+		return;
+	}
+
+	if (!HasAuthority())
 	{
 		return;
 	}
