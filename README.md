@@ -1,4 +1,4 @@
-# Project_GemCoop
+# Project_GemTrio
 
 <p align="center">
   <img src="https://img.shields.io/badge/Unreal%20Engine-5.7-4A90E2?style=for-the-badge&logo=unrealengine" alt="Unreal Engine 5.7" />
@@ -141,12 +141,6 @@ Project_GemCoop/
 - 전투, 서바이벌, 스킬, 웨이브 설계 및 구현
 - UI/상태 전환 설계
 - 확장 가능한 모듈형 게임 아키텍처 설계
-
-## Contact
-
-- GitHub: [Your GitHub Username]
-- Email: [your@email.com]
-- Portfolio: [your-portfolio-link]
 
 ## License
 
